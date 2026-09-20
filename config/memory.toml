@@ -1,0 +1,25 @@
+# AgentBox v5.0-beta1 — memory / context defaults
+[memory]
+# Filesystem mirror root (relative to AGENTBOX_V5_HOME or absolute)
+fs_root = "memory"
+# Purge expired task memories on read
+purge_expired = true
+
+[memory.scopes]
+user = { durable = true, default_kind = "preference" }
+project = { durable = true, default_kind = "fact" }
+agent = { durable = true, default_kind = "note" }
+task = { durable = false, default_kind = "note", ttl_secs = 86400 }
+
+[context]
+# Total token budget for assembled context pack
+max_tokens = 4000
+# Per-layer caps (approx tokens ≈ chars/4)
+max_tokens_user = 800
+max_tokens_project = 800
+max_tokens_agent = 600
+max_tokens_task = 800
+max_tokens_events = 1000
+max_events = 20
+# Rough chars-per-token estimate
+chars_per_token = 4

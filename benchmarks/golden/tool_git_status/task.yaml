@@ -1,0 +1,6 @@
+id: golden.tool_git_status
+name: tool_git_status
+kind: validator
+critical: true
+description: Invoke git.status tool against demo-python (fast)
+cwd: /workspace/projects/demo-python

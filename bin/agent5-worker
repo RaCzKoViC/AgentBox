@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# AgentBox v5.1 remote worker CLI (loopback-capable)
+set -euo pipefail
+
+_resolve() {
+  local bin_dir
+  bin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -d "${HOME}/.local/lib/agentbox5" ]]; then
+    export AGENTBOX_V5_LIB="${AGENTBOX_V5_LIB:-$HOME/.local/lib/agentbox5}"
+  elif [[ -d "${bin_dir}/../lib" ]]; then
+    export AGENTBOX_V5_LIB="${AGENTBOX_V5_LIB:-$(cd "${bin_dir}/../lib" && pwd)}"
+  fi
+  export PYTHONPATH="${AGENTBOX_V5_LIB}${PYTHONPATH:+:$PYTHONPATH}"
+  export AGENTBOX_WORKER_HOME="${AGENTBOX_WORKER_HOME:-$HOME/.local/share/agentbox-worker}"
+  mkdir -p "${AGENTBOX_WORKER_HOME}"/{state,cache,artifacts,logs,runtime}
+}
+_resolve
+
+usage() {
+  cat <<'U'
+agent5-worker — AgentBox v5.1 remote worker
+
+Usage:
+  agent5-worker enroll --url URL --token TOKEN [--name NAME]
+  agent5-worker start [--background|-d]
+  agent5-worker stop
+  agent5-worker status
+  agent5-worker heartbeat
+  agent5-worker health
+  agent5-worker capabilities
+  agent5-worker diagnostics
+U
+}
+
+cmd_enroll() {
+  local url="" token="" name=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --url|--control-plane) url="$2"; shift 2 ;;
+      --token) token="$2"; shift 2 ;;
+      --name) name="$2"; shift 2 ;;
+      *) echo "unknown: $1" >&2; return 2 ;;
+    esac
+  done
+  if [[ -n "$url" && "$url" != http://* && "$url" != https://* ]]; then
+    url="http://${url}"
+  fi
+  [[ -n "$url" && -n "$token" ]] || { echo "usage: enroll --url URL --token TOKEN" >&2; return 2; }
+  export AB_ENROLL_URL="$url" AB_ENROLL_TOKEN="$token" AB_ENROLL_NAME="${name}"
+  python3 - <<'PY'
+import json, os
+from worker import runtime
+r = runtime.enroll(os.environ["AB_ENROLL_URL"], os.environ["AB_ENROLL_TOKEN"], name=os.environ.get("AB_ENROLL_NAME") or "")
+print(json.dumps(r, indent=2))
+PY
+}
+
+cmd_start() {
+  local bg=0
+  [[ "${1:-}" == "--background" || "${1:-}" == "-d" ]] && bg=1
+  if [[ "$bg" -eq 1 ]]; then
+    nohup python3 -c 'from worker import runtime; runtime.start_loop(True)' \
+      >>"${AGENTBOX_WORKER_HOME}/logs/worker.log" 2>&1 &
+    echo $! >"${AGENTBOX_WORKER_HOME}/runtime/worker.pid"
+    echo "started pid=$!"
+  else
+    exec python3 -c 'from worker import runtime; runtime.start_loop(True)'
+  fi
+}
+
+cmd_stop() {
+  python3 -c 'from worker import runtime; import json; print(json.dumps({"stopped": runtime.stop()}))'
+}
+
+cmd_status() {
+  python3 -c 'from worker import runtime; import json; print(json.dumps(runtime.status(), indent=2))'
+}
+
+cmd_heartbeat() {
+  python3 -c 'from worker import runtime; import json; print(json.dumps(runtime.send_heartbeat(), indent=2))'
+}
+
+cmd_health() {
+  python3 -c 'from worker import health; import json; print(json.dumps(health.snapshot(), indent=2))'
+}
+
+cmd_capabilities() {
+  python3 -c 'from distributed.capabilities import probe_local; import json; print(json.dumps(probe_local(), indent=2))'
+}
+
+cmd_diagnostics() {
+  python3 - <<'PY'
+import json
+from worker import runtime, health, local_store, VERSION
+from distributed.capabilities import probe_local
+print(json.dumps({
+  "version": VERSION,
+  "status": runtime.status(),
+  "health": health.snapshot(),
+  "capabilities": probe_local(),
+  "state_keys": list(local_store.load_state().keys()),
+}, indent=2))
+PY
+}
+
+main() {
+  local cmd="${1:-}"; shift || true
+  case "$cmd" in
+    enroll) cmd_enroll "$@" ;;
+    start) cmd_start "$@" ;;
+    stop) cmd_stop ;;
+    status) cmd_status ;;
+    heartbeat) cmd_heartbeat ;;
+    health) cmd_health ;;
+    capabilities) cmd_capabilities ;;
+    diagnostics) cmd_diagnostics ;;
+    help|-h|--help|"") usage ;;
+    *) echo "unknown: $cmd" >&2; usage; return 2 ;;
+  esac
+}
+main "$@"

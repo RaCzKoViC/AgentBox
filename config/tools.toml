@@ -1,0 +1,9 @@
+[tools]
+dynamic_discovery = true
+tool_chaining = true
+mcp = true
+connectors = true
+reliability_scoring = true
+tool_outcome_memory = true
+safe_shell = true
+workspace_write_only = true

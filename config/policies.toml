@@ -1,0 +1,46 @@
+# AgentBox v5.0-beta3 — policies.toml (share copy; INI is canonical at ~/.config/agentbox-v5/)
+# Prefer policies.ini. This file remains for backward compatibility.
+# AUTO_APPROVE=1 auto-allows non-CRITICAL; force_push / privileged / system writes stay deny.
+
+[git]
+commit = "allow"
+merge = "approval"
+push = "approval"
+force_push = "deny"
+# legacy bools
+allow_commit = true
+allow_merge = true
+allow_push = true
+allow_force_push = false
+
+[filesystem]
+workspace_only = true
+allow_system_write = false
+secret_files = "deny"
+write = "allow"
+read = "allow"
+allow_delete = "approval"
+
+[docker]
+enabled = true
+allow = true
+privileged = "deny"
+allow_privileged = false
+
+[network]
+outbound = "allow"
+allow = true
+unknown_domains = "approval"
+
+[packages]
+install = "approval"
+
+[run]
+before_run = "allow"
+
+[agent]
+delegate = "allow"
+
+[approvals]
+risk_threshold = 60
+critical_threshold = 80

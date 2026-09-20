@@ -1,0 +1,28 @@
+{
+  "id": "git.diff",
+  "name": "git.diff",
+  "display_name": "Git Diff",
+  "category": "git",
+  "provider": "builtin",
+  "version": "1.0.0",
+  "capabilities": ["git_diff", "git.diff"],
+  "permissions": ["git"],
+  "risk": {"default": "LOW"},
+  "execution": {"mode": "local", "timeout": 60},
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "cwd": {"type": "string"},
+      "path": {"type": "string"},
+      "staged": {"type": "boolean", "default": false}
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "ok": {"type": "boolean"},
+      "stdout": {"type": "string"},
+      "exit_code": {"type": "integer"}
+    }
+  }
+}

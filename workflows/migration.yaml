@@ -1,0 +1,5 @@
+name: migration
+description: Data/schema migration
+stages: [planner, architect, coder, tester, reviewer]
+approvals: [plan, merge]
+retry: {max_attempts: 2}

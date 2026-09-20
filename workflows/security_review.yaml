@@ -1,0 +1,13 @@
+name: security_review
+description: Security-focused review workflow
+stages:
+  - agent: planner
+  - agent: researcher
+    title: Threat model / research
+  - agent: architect
+  - agent: coder
+  - agent: reviewer
+    title: Security review
+    approval_gate: before_merge
+approvals: [plan, merge]
+retry: {max_attempts: 1}

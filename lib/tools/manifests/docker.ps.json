@@ -1,0 +1,26 @@
+{
+  "id": "docker.ps",
+  "name": "docker.ps",
+  "display_name": "Docker PS",
+  "category": "docker",
+  "provider": "builtin",
+  "version": "1.0.0",
+  "capabilities": ["docker_ps", "docker.ps"],
+  "permissions": ["docker"],
+  "risk": {"default": "LOW"},
+  "execution": {"mode": "local", "timeout": 30},
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "all": {"type": "boolean", "default": false}
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "ok": {"type": "boolean"},
+      "stdout": {"type": "string"},
+      "exit_code": {"type": "integer"}
+    }
+  }
+}

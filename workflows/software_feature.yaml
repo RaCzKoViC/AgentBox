@@ -1,0 +1,24 @@
+name: software_feature
+description: End-to-end software feature delivery
+stages:
+  - agent: planner
+    title: Plan feature
+    description: Clarify scope, constraints, and success criteria
+  - agent: architect
+    title: Design architecture
+    description: Propose design and module boundaries
+  - agent: coder
+    title: Implement feature
+    description: Write production code for the feature
+  - agent: tester
+    title: Test feature
+    description: Add and run automated tests
+  - agent: reviewer
+    title: Review changes
+    description: Code review and quality gate
+    approval_gate: before_merge
+approvals:
+  - plan
+  - merge
+retry:
+  max_attempts: 2

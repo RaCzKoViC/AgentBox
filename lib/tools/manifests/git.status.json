@@ -1,0 +1,27 @@
+{
+  "id": "git.status",
+  "name": "git.status",
+  "display_name": "Git Status",
+  "category": "git",
+  "provider": "builtin",
+  "version": "1.0.0",
+  "capabilities": ["git_status", "git.status"],
+  "permissions": ["git"],
+  "risk": {"default": "LOW"},
+  "execution": {"mode": "local", "timeout": 30},
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "cwd": {"type": "string", "description": "Repo path under /workspace"},
+      "porcelain": {"type": "boolean", "default": true}
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "ok": {"type": "boolean"},
+      "stdout": {"type": "string"},
+      "exit_code": {"type": "integer"}
+    }
+  }
+}

@@ -1,0 +1,5 @@
+name: incident
+description: Incident response workflow
+stages: [planner, researcher, coder, tester, reviewer]
+approvals: [plan]
+retry: {max_attempts: 3}

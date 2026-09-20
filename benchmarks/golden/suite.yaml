@@ -1,0 +1,5 @@
+id: golden
+name: golden
+version: 1
+description: Fast deterministic golden checks (no Codex)
+threshold: 0.80

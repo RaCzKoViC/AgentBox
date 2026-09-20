@@ -1,0 +1,7 @@
+id: golden.memory_retrieval
+name: memory_retrieval
+kind: validator
+critical: true
+description: Stub memory retrieval recall check
+expect:
+  min_hits: 1

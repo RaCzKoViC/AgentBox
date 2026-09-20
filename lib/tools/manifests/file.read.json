@@ -1,0 +1,30 @@
+{
+  "id": "file.read",
+  "name": "file.read",
+  "display_name": "Read File",
+  "category": "filesystem",
+  "provider": "builtin",
+  "version": "1.0.0",
+  "capabilities": ["read_file", "filesystem.read"],
+  "permissions": ["filesystem"],
+  "risk": {"default": "LOW"},
+  "execution": {"mode": "local", "timeout": 30},
+  "input_schema": {
+    "type": "object",
+    "required": ["path"],
+    "properties": {
+      "path": {"type": "string", "description": "Path under /workspace"},
+      "encoding": {"type": "string", "default": "utf-8"},
+      "max_bytes": {"type": "integer", "default": 1048576}
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "ok": {"type": "boolean"},
+      "path": {"type": "string"},
+      "content": {"type": "string"},
+      "size": {"type": "integer"}
+    }
+  }
+}

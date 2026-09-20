@@ -1,0 +1,17 @@
+name: bugfix
+description: Reproduce, fix, and verify a bug
+stages:
+  - agent: planner
+    title: Triage bug
+  - agent: researcher
+    title: Investigate root cause
+  - agent: coder
+    title: Implement fix
+  - agent: tester
+    title: Verify fix
+  - agent: reviewer
+    title: Review fix
+    approval_gate: before_merge
+approvals: [plan, merge]
+retry:
+  max_attempts: 3

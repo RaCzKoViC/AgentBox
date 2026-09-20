@@ -1,0 +1,31 @@
+# AgentBox v5.0-beta3 — budgets
+[global]
+daily_cost_usd = 20.0
+monthly_cost_usd = 200.0
+max_parallel_agents = 4
+# legacy aliases
+daily_cost_limit = 50.0
+parallel_agent_limit = 4
+container_limit = 4
+
+[task_defaults]
+max_runtime_seconds = 3600
+max_agent_runs = 12
+max_retries = 2
+max_tokens = 150000
+max_cost_usd = 5.0
+max_files_changed = 50
+max_handoffs = 10
+
+# legacy [defaults] kept for alpha3 callers
+[defaults]
+max_runtime_secs = 1800
+max_tokens = 100000
+max_cost_usd = 5.0
+max_retries = 2
+max_files_changed = 50
+max_handoffs = 10
+
+[stub]
+token_cost = 10
+cost_usd = 0.01

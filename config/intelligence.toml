@@ -1,0 +1,17 @@
+[intelligence]
+semantic_index = true
+vector_memory = true
+model_router = true
+context_compression = true
+experience_learning = true
+cross_project = false
+
+[embeddings]
+provider = "local"
+model = "local-hash-bow"
+dimension = 256
+# optional: provider = "ollama" when Ollama is available
+
+[router]
+default_privacy = "ANY_APPROVED"
+prefer_local_when_low_complexity = true

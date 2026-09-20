@@ -1,0 +1,104 @@
+# AgentBox v5.0-beta2 — agent registry seed + can_delegate matrix
+# Random delegation is DENIED. Only edges listed under [delegate] are allowed.
+
+[agents.planner]
+name = "Planner"
+role = "planner"
+provider = "codex"
+model = ""
+capabilities = ["plan", "decompose", "delegate"]
+
+[agents.researcher]
+name = "Researcher"
+role = "researcher"
+provider = "codex"
+capabilities = ["research", "summarize"]
+
+[agents.architect]
+name = "Architect"
+role = "architect"
+provider = "codex"
+capabilities = ["design", "decompose"]
+
+[agents.security]
+name = "Security"
+role = "security"
+provider = "codex"
+capabilities = ["audit", "threat-model"]
+
+[agents.performance]
+name = "Performance"
+role = "performance"
+provider = "codex"
+capabilities = ["profile", "optimize"]
+
+[agents.coder]
+name = "Coder"
+role = "coder"
+provider = "codex"
+capabilities = ["implement", "refactor"]
+
+[agents.tester]
+name = "Tester"
+role = "tester"
+provider = "codex"
+capabilities = ["test", "verify"]
+
+[agents.debugger]
+name = "Debugger"
+role = "debugger"
+provider = "codex"
+capabilities = ["debug", "diagnose"]
+
+[agents.reviewer]
+name = "Reviewer"
+role = "reviewer"
+provider = "codex"
+capabilities = ["review", "approve"]
+
+# can_delegate edges (source → targets)
+[delegate]
+planner = ["researcher", "architect"]
+architect = ["security", "performance", "coder"]
+coder = ["tester", "debugger"]
+tester = ["debugger"]
+reviewer = ["security", "debugger"]
+
+# beta3 permission profiles (role → capabilities)
+[permissions.planner]
+read_files = true
+write_files = false
+delete_files = false
+network = true
+git_commit = false
+git_merge = false
+git_push = false
+package_install = false
+docker = false
+database = false
+deploy = false
+delegate_to = ["researcher", "architect"]
+
+[permissions.coder]
+read_files = true
+write_files = true
+delete_files = true
+network = true
+git_commit = true
+git_merge = false
+git_push = false
+package_install = true
+docker = true
+database = false
+deploy = false
+delegate_to = ["tester", "debugger"]
+
+[permissions.tester]
+read_files = true
+write_files = true
+delete_files = false
+network = true
+git_commit = false
+package_install = true
+docker = true
+delegate_to = ["debugger"]

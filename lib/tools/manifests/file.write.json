@@ -1,0 +1,30 @@
+{
+  "id": "file.write",
+  "name": "file.write",
+  "display_name": "Write File",
+  "category": "filesystem",
+  "provider": "builtin",
+  "version": "1.0.0",
+  "capabilities": ["write_file", "filesystem.write"],
+  "permissions": ["filesystem"],
+  "risk": {"default": "MODERATE"},
+  "execution": {"mode": "local", "timeout": 30},
+  "input_schema": {
+    "type": "object",
+    "required": ["path", "content"],
+    "properties": {
+      "path": {"type": "string"},
+      "content": {"type": "string"},
+      "encoding": {"type": "string", "default": "utf-8"},
+      "create_dirs": {"type": "boolean", "default": true}
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "ok": {"type": "boolean"},
+      "path": {"type": "string"},
+      "bytes_written": {"type": "integer"}
+    }
+  }
+}

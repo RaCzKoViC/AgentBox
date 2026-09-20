@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/app.css"/>
+</head>
+<body class="login-body">
+  <form id="login" class="login-card">
+    <h1>AgentBox</h1>
+    <p class="muted">Control Plane · enter admin token</p>
+    <input id="token" type="password" placeholder="Admin token" autocomplete="current-password" required/>
+    <button type="submit">Sign in</button>
+    <p id="err" class="error" hidden></p>
+  </form>
+  <script src="/static/login.js"></script>
+</body>
+</html>

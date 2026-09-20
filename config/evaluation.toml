@@ -1,0 +1,19 @@
+[evaluation]
+enabled = true
+correctness_regression_percent = 5
+cost_regression_percent = 15
+latency_regression_percent = 20
+failure_rate_regression_percent = 5
+score_threshold = 0.80
+daily_budget_usd = 5
+max_parallel_runs = 2
+max_cases_per_run = 100
+
+[self_improvement]
+evaluation = true
+benchmarks = true
+failure_mining = true
+proposals = true
+ab_testing = true
+canary = true
+auto_promotion = false

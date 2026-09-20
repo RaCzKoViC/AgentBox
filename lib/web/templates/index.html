@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/app.css"/>
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar">
+      <div class="brand">AgentBox <span class="ver">{{ version }}</span></div>
+      <nav>
+        <a href="#overview" data-page="overview" class="active">Overview</a>
+        <a href="#tasks" data-page="tasks">Tasks</a>
+        <a href="#approvals" data-page="approvals">Approvals</a>
+        <a href="#handoffs" data-page="handoffs">Handoffs</a>
+        <a href="#agents" data-page="agents">Agents</a>
+        <a href="#nodes" data-page="nodes">Nodes</a>
+        <a href="#intelligence" data-page="intelligence">Intelligence</a>
+        <a href="#plans" data-page="plans">Plans</a>
+        <a href="#tools" data-page="tools">Tools</a>
+        <a href="#eval" data-page="eval">Eval</a>
+        <a href="#metrics" data-page="metrics">Metrics</a>
+      </nav>
+      <div class="sidebar-foot">
+        <span id="ws-state" class="pill">ws: …</span>
+        <button id="logout" class="linkish">Logout</button>
+      </div>
+    </aside>
+    <main>
+      <header class="top">
+        <h2 id="page-title">Overview</h2>
+        <div id="live-banner" class="muted">Connecting…</div>
+      </header>
+      <section id="content"></section>
+    </main>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

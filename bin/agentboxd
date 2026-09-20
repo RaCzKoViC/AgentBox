@@ -1,0 +1,329 @@
+#!/usr/bin/env bash
+# AgentBox v5 daemon (beta2) — Safety + scheduler + resource sampler
+set -euo pipefail
+
+_resolve() {
+  local bin_dir
+  bin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -d "${HOME}/.local/lib/agentbox5" ]]; then
+    export AGENTBOX_V5_LIB="${AGENTBOX_V5_LIB:-$HOME/.local/lib/agentbox5}"
+  elif [[ -d "${bin_dir}/../lib" ]]; then
+    export AGENTBOX_V5_LIB="${AGENTBOX_V5_LIB:-$(cd "${bin_dir}/../lib" && pwd)}"
+  fi
+  export AGENTBOX_V5_HOME="${AGENTBOX_V5_HOME:-$HOME/.local/share/agentbox/v5}"
+  export AGENTBOX_V5_DB="${AGENTBOX_V5_DB:-$AGENTBOX_V5_HOME/data/agentbox.db}"
+}
+
+_resolve
+
+# shellcheck disable=SC1091
+source "${AGENTBOX_V5_LIB}/core/state.sh"
+# shellcheck disable=SC1091
+source "${AGENTBOX_V5_LIB}/core/runner.sh"
+# shellcheck disable=SC1091
+source "${AGENTBOX_V5_LIB}/core/scheduler.sh"
+# shellcheck disable=SC1091
+source "${AGENTBOX_V5_LIB}/storage/logs.sh" 2>/dev/null || true
+
+# Autonomous by default — never block on approval gates
+export AGENTBOX_AUTO_APPROVE="${AGENTBOX_AUTO_APPROVE:-1}"
+export AGENTBOX_V5_RUNNER="${AGENTBOX_V5_RUNNER:-}"
+
+PID_DIR="${AGENTBOX_V5_HOME}/runtime/pids"
+PID_FILE="${PID_DIR}/agentboxd.pid"
+WORKER_PID_DIR="${PID_DIR}/workers"
+LOG_FILE="${AGENTBOX_V5_HOME}/logs/daemon.log"
+LOCK_DIR="${AGENTBOX_V5_HOME}/runtime/locks"
+
+dlog() {
+  mkdir -p "$(dirname "$LOG_FILE")"
+  local ts
+  ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  echo "[$ts] $*" | tee -a "$LOG_FILE" >&2
+}
+
+is_running() {
+  [[ -f "$PID_FILE" ]] || return 1
+  local pid
+  pid="$(tr -d '[:space:]' < "$PID_FILE")"
+  [[ -n "$pid" ]] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+_reap_workers() {
+  mkdir -p "$WORKER_PID_DIR"
+  local f pid
+  for f in "$WORKER_PID_DIR"/worker-*.pid; do
+    [[ -f "$f" ]] || continue
+    pid="$(tr -d '[:space:]' < "$f" 2>/dev/null || true)"
+    if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
+      rm -f "$f"
+    fi
+  done
+}
+
+_count_worker_pids() {
+  _reap_workers
+  local n=0 f
+  for f in "$WORKER_PID_DIR"/worker-*.pid; do
+    [[ -f "$f" ]] || continue
+    n=$((n + 1))
+  done
+  echo "$n"
+}
+
+_spawn_worker() {
+  local tid="$1"
+  local worker_id="$2"
+  mkdir -p "$WORKER_PID_DIR"
+
+  # --- alpha3 Safety: policy gate (auto-approve) + budget ---
+  export AGENTBOX_AUTO_APPROVE="${AGENTBOX_AUTO_APPROVE:-1}"
+  local gate_json
+  gate_json="$(python3 "${AGENTBOX_V5_LIB}/policy/approvals.py" ensure-gate "$tid" 2>/dev/null || echo '{}')"
+  if python3 -c 'import json,sys
+d=json.load(sys.stdin)
+raise SystemExit(0 if isinstance(d,dict) and d.get("denied") else 1)
+' <<<"$gate_json" 2>/dev/null; then
+    dlog "policy DENIED task=$tid — skip"
+    return 1
+  fi
+  # Pending only when AUTO_APPROVE=0
+  if python3 -c 'import json,sys
+d=json.load(sys.stdin)
+raise SystemExit(0 if isinstance(d,dict) and d.get("status")=="pending" else 1)
+' <<<"$gate_json" 2>/dev/null; then
+    dlog "awaiting_approval task=$tid — defer (AUTO_APPROVE off)"
+    return 1
+  fi
+  if ! python3 "${AGENTBOX_V5_LIB}/policy/budgets.py" check "$tid" >/dev/null 2>&1; then
+    python3 "${AGENTBOX_V5_LIB}/policy/budgets.py" pause "$tid" "daemon: budget check failed" >/dev/null 2>&1 || true
+    dlog "paused_budget task=$tid — skip"
+    return 1
+  fi
+
+  # Claim queued → scheduled atomically
+  local claimed
+  claimed="$(ab5_db claim "$tid" 2>/dev/null || echo '{}')"
+  local cid
+  cid="$(python3 -c 'import json,sys
+try:
+  d=json.load(sys.stdin)
+  print(d.get("id","") if isinstance(d,dict) else "")
+except Exception:
+  print("")
+' <<<"$claimed")"
+  if [[ -z "$cid" ]]; then
+    dlog "claim failed (already taken?) task=$tid"
+    return 1
+  fi
+
+  (
+    # Worker subprocess
+    export AGENTBOX_V5_HOME AGENTBOX_V5_DB AGENTBOX_V5_LIB AGENTBOX_AUTO_APPROVE AGENTBOX_V5_RUNNER
+    # shellcheck disable=SC1091
+    source "${AGENTBOX_V5_LIB}/core/state.sh"
+    # shellcheck disable=SC1091
+    source "${AGENTBOX_V5_LIB}/core/runner.sh"
+    _run_fn=ab5_run_task
+    if declare -F ab5_run_task >/dev/null 2>&1; then _run_fn=ab5_run_task; fi
+    if "$_run_fn" "$tid" "$worker_id"; then
+      echo "[worker $worker_id] completed task=$tid" >>"$LOG_FILE"
+    else
+      echo "[worker $worker_id] FAILED task=$tid" >>"$LOG_FILE"
+      ab5_db set-status "$tid" failed >>"$LOG_FILE" 2>&1 || true
+    fi
+    rm -f "${WORKER_PID_DIR}/worker-${tid}.pid"
+  ) >>"$LOG_FILE" 2>&1 &
+  local wpid=$!
+  echo "$wpid" > "${WORKER_PID_DIR}/worker-${tid}.pid"
+  dlog "spawned worker=$worker_id pid=$wpid task=$tid"
+}
+
+cmd_status() {
+  ab5_ensure_env
+  local stats running_pids
+  if is_running; then
+    local pid
+    pid="$(tr -d '[:space:]' < "$PID_FILE")"
+    echo "agentboxd: running (pid=$pid)"
+  else
+    echo "agentboxd: stopped"
+  fi
+  echo "pidfile=$PID_FILE"
+  echo "log=$LOG_FILE"
+  running_pids="$(_count_worker_pids)"
+  echo "worker_pids=$running_pids"
+  if [[ -f "$AGENTBOX_V5_DB" ]]; then
+    stats="$(ab5_db queue-stats 2>/dev/null || echo '{}')"
+    python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+print("queued=%s ready=%s running=%s completed=%s failed=%s" % (
+  d.get("queued",0), d.get("ready",0), d.get("running",0),
+  d.get("completed",0), d.get("failed",0)))
+' <<<"$stats" 2>/dev/null || echo "queue: (unavailable)"
+    local mw
+    mw="$(ab5_read_max_workers)"
+    echo "max_workers=$mw"
+  fi
+  if is_running; then
+    return 0
+  fi
+  return 1
+}
+
+cmd_stop() {
+  if ! is_running; then
+    echo "agentboxd: already stopped"
+    rm -f "$PID_FILE"
+    # clean orphan worker pid files
+    mkdir -p "$WORKER_PID_DIR"
+    rm -f "$WORKER_PID_DIR"/worker-*.pid 2>/dev/null || true
+    return 0
+  fi
+  local pid
+  pid="$(tr -d '[:space:]' < "$PID_FILE")"
+  dlog "stopping pid=$pid"
+  # Kill workers first
+  local f wpid
+  for f in "$WORKER_PID_DIR"/worker-*.pid; do
+    [[ -f "$f" ]] || continue
+    wpid="$(tr -d '[:space:]' < "$f" 2>/dev/null || true)"
+    if [[ -n "$wpid" ]]; then
+      kill -TERM "$wpid" 2>/dev/null || true
+    fi
+  done
+  kill -TERM "$pid" 2>/dev/null || true
+  local i
+  for i in $(seq 1 20); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.2
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    dlog "force kill pid=$pid"
+    kill -KILL "$pid" 2>/dev/null || true
+  fi
+  # Sweep remaining workers
+  for f in "$WORKER_PID_DIR"/worker-*.pid; do
+    [[ -f "$f" ]] || continue
+    wpid="$(tr -d '[:space:]' < "$f" 2>/dev/null || true)"
+    if [[ -n "$wpid" ]]; then
+      kill -KILL "$wpid" 2>/dev/null || true
+    fi
+    rm -f "$f"
+  done
+  rm -f "$PID_FILE"
+  echo "agentboxd: stopped"
+}
+
+daemon_loop() {
+  ab5_ensure_env
+  mkdir -p "$PID_DIR" "$WORKER_PID_DIR" "$LOCK_DIR" "$(dirname "$LOG_FILE")"
+  echo "$$" > "$PID_FILE"
+  local max_workers poll
+  max_workers="$(ab5_read_max_workers)"
+  poll=1
+  dlog "daemon started pid=$$ db=$AGENTBOX_V5_DB max_workers=$max_workers"
+
+  if [[ ! -f "$AGENTBOX_V5_DB" ]]; then
+    ab5_db init >/dev/null
+    dlog "initialized empty DB"
+  fi
+
+  trap 'dlog "daemon exiting pid=$$"; rm -f "$PID_FILE"; exit 0' TERM INT
+
+  local tick=0
+  local sample_every=5
+  local last_sample=0
+  while true; do
+    _reap_workers
+    # beta2: resource sampler ~every 5s (soft-fail)
+    if [[ $((tick - last_sample)) -ge "$sample_every" ]] || [[ "$tick" -eq 0 ]]; then
+      python3 "${AGENTBOX_V5_LIB}/observability/sampler.py" >/dev/null 2>&1 || true
+      last_sample=$tick
+    fi
+    max_workers="$(ab5_read_max_workers)"
+    local active slots
+    # Prefer DB count of running/scheduled; also respect local worker pids
+    active="$(ab5_db count-running 2>/dev/null || echo 0)"
+    local wpids
+    wpids="$(_count_worker_pids)"
+    # Use the larger of the two as occupancy signal
+    if [[ "$wpids" -gt "$active" ]]; then
+      active="$wpids"
+    fi
+    slots=$(( max_workers - active ))
+    if [[ "$slots" -lt 0 ]]; then slots=0; fi
+
+    if [[ "$slots" -gt 0 ]]; then
+      local ready_json
+      ready_json="$(ab5_scheduler_pick_ready "$slots" 2>/dev/null || echo '[]')"
+      local ids
+      ids="$(python3 -c '
+import json,sys
+try:
+  arr=json.load(sys.stdin)
+  if isinstance(arr,list):
+    for t in arr:
+      if isinstance(t,dict) and t.get("id"):
+        print(t["id"])
+except Exception:
+  pass
+' <<<"$ready_json")"
+      local tid
+      while IFS= read -r tid; do
+        [[ -n "$tid" ]] || continue
+        # Re-check slots
+        active="$(ab5_db count-running 2>/dev/null || echo 0)"
+        wpids="$(_count_worker_pids)"
+        if [[ "$wpids" -gt "$active" ]]; then active="$wpids"; fi
+        if [[ "$active" -ge "$max_workers" ]]; then
+          dlog "at capacity max_workers=$max_workers — defer task=$tid"
+          break
+        fi
+        local wid="agentboxd-$$-w${tick}"
+        tick=$((tick + 1))
+        dlog "scheduler pick ready task=$tid (active=$active/$max_workers)"
+        _spawn_worker "$tid" "$wid" || true
+      done <<<"$ids"
+    fi
+
+    tick=$((tick + 1))
+    sleep "$poll"
+  done
+}
+
+cmd_start() {
+  if is_running; then
+    local pid
+    pid="$(tr -d '[:space:]' < "$PID_FILE")"
+    echo "agentboxd: already running (pid=$pid)"
+    return 0
+  fi
+  mkdir -p "$PID_DIR" "$WORKER_PID_DIR" "$(dirname "$LOG_FILE")"
+  nohup "$0" --loop >>"$LOG_FILE" 2>&1 &
+  local pid=$!
+  echo "$pid" > "$PID_FILE"
+  sleep 0.4
+  if kill -0 "$pid" 2>/dev/null; then
+    local mw
+    mw="$(ab5_read_max_workers 2>/dev/null || echo 2)"
+    echo "agentboxd: started (pid=$pid max_workers=$mw)"
+    return 0
+  fi
+  echo "agentboxd: failed to start (see $LOG_FILE)" >&2
+  rm -f "$PID_FILE"
+  return 1
+}
+
+case "${1:-}" in
+  start) cmd_start ;;
+  stop) cmd_stop ;;
+  status) cmd_status ;;
+  --loop) daemon_loop ;;
+  *)
+    echo "Usage: agentboxd start|stop|status" >&2
+    exit 2
+    ;;
+esac

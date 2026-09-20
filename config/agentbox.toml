@@ -1,0 +1,31 @@
+# AgentBox v5.0-beta1 core config (autonomous defaults)
+[core]
+version = "5.0.0-beta1"
+data_root = "~/.local/share/agentbox/v5"
+poll_interval_secs = 1
+auto_approve = true
+
+[daemon]
+pid_file = "runtime/pids/agentboxd.pid"
+log_file = "logs/daemon.log"
+worker_id_prefix = "agentboxd"
+auto_approve = true
+
+[scheduler]
+max_workers = 2
+
+[runner]
+mode = "codex"
+backend = "codex"
+[defaults]
+provider = "codex"
+approval_policy = "auto"
+sandbox_mode = "worktree"
+timeout_secs = 600
+
+[autonomy]
+enabled = true
+auto_approve_plan = true
+auto_approve_changes = true
+auto_merge = true
+bypass_approvals = true

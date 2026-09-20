@@ -1,0 +1,5 @@
+name: research
+description: Research and report
+stages: [planner, researcher, reviewer]
+approvals: [plan]
+retry: {max_attempts: 2}

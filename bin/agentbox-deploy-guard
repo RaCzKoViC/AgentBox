@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# AgentBox deployment guard — abort if not on the designated AgentBox host/tree
+set -euo pipefail
+
+EXPECTED_HOST="${AGENTBOX_EXPECTED_HOST:-cursor}"
+EXPECTED_IP="${AGENTBOX_EXPECTED_IP:-100.123.66.15}"
+EXPECTED_USER="${AGENTBOX_EXPECTED_USER:-box}"
+EXPECTED_ROOT="${AGENTBOX_EXPECTED_ROOT:-/workspace/agentbox-v5}"
+
+host="$(hostname -s 2>/dev/null || hostname)"
+user="$(id -un)"
+ip4="$(tailscale ip -4 2>/dev/null || true)"
+
+ok=1
+msg=()
+
+if [[ "$user" != "$EXPECTED_USER" ]]; then
+  ok=0
+  msg+=("user='$user' != expected '$EXPECTED_USER'")
+fi
+if [[ "$host" != "$EXPECTED_HOST" && "$host" != "${EXPECTED_HOST}."* ]]; then
+  # allow hostname match ignoring domain
+  if [[ "${host%%.*}" != "$EXPECTED_HOST" ]]; then
+    ok=0
+    msg+=("hostname='$host' != expected '$EXPECTED_HOST'")
+  fi
+fi
+if [[ -n "$ip4" && "$ip4" != "$EXPECTED_IP" ]]; then
+  ok=0
+  msg+=("tailscale_ip='$ip4' != expected '$EXPECTED_IP'")
+fi
+if [[ ! -d "$EXPECTED_ROOT" ]]; then
+  ok=0
+  msg+=("missing root $EXPECTED_ROOT")
+fi
+
+if [[ "$ok" != "1" ]]; then
+  echo "[ERR] agentbox-deploy-guard FAILED — wrong deployment target:" >&2
+  printf '  - %s\n' "${msg[@]}" >&2
+  echo "  Aborting so beta/install does not land on another host." >&2
+  exit 1
+fi
+
+echo "[OK] agentbox-deploy-guard: host=$host user=$user ip=${ip4:-?} root=$EXPECTED_ROOT"
+exit 0

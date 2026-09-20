@@ -1,0 +1,5 @@
+name: release
+description: Release preparation and ship
+stages: [planner, tester, reviewer, releaser]
+approvals: [plan, release]
+retry: {max_attempts: 1}

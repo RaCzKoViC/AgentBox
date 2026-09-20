@@ -1,0 +1,6 @@
+id: golden.plan_software_feature
+name: plan_software_feature
+kind: validator
+critical: true
+description: Compile software_feature workflow/plan graph (deterministic, no Codex)
+template: software_feature

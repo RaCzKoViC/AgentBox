@@ -1,0 +1,11 @@
+# Providers stub (alpha1)
+[codex]
+enabled = true
+command = "codex"
+notes = "v4.9 path still available; v5 alpha1 uses stub runner"
+
+[cursor]
+enabled = false
+
+[shell]
+enabled = true
