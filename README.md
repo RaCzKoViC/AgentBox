@@ -1,79 +1,57 @@
-# AgentBox
+# AgentBox v5.6.0 — Operations Autopilot
 
-**Autonomous multi-agent execution platform** — Control Plane on a dedicated host with policy, budgets, risk, distributed workers, intelligence, planning, tools, and evaluation.
+Versioned AgentBox v5 control plane. **v5.6 = Operations Autopilot** (playbooks, drift, forecast, cleanup, smart backup, remediation, upgrade readiness) on top of v5.5 Evaluation + v5.4 Tools + v5.3 Planning + v5.2 Intelligence + v5.1 Distributed Workers + Stable Ops.
 
-| | |
-|--|--|
-| **Version** | `5.5.0` |
-| **Org** | [RaCzKoViC](https://github.com/RaCzKoViC) |
-| **Control Plane (example)** | Tailscale `100.123.66.15` · hostname `cursor` · user `box` |
-| **Dashboard** | `http://<tailscale-ip>:8787` |
+> **Does not replace v4.9.** Launcher `~/.local/bin/agentbox` remains. v5 installs `agentbox5` (+ symlink `agent5`), `agentboxd`, and `agent5-worker`.
+>
+> **Low-risk auto; high-risk needs approval.** Playbooks like `quarantine_worker` / `restore_backup` never apply without human approval.
+>
+> **Deploy:** only host `cursor` / Tailscale `100.123.66.15` / user `box` / root `/workspace/agentbox-v5` — `agentbox-deploy-guard`.
 
-> **Security:** Never commit admin tokens, SSH passwords, or API keys. Use `agent5 web token` on the server and SSH keys / your password manager for login.
-
----
-
-## What it is
-
-AgentBox turns a Linux host into a **Control Plane** for AI coding agents:
-
-- Task queue + Git worktrees + Codex/Claude runners  
-- Policy / Budget / Risk / Approvals (enforcement on every sensitive action)  
-- Observability (metrics, timeline, handoffs)  
-- Memory + semantic index + model router  
-- Autonomous planning (goals, workflows, plan revision)  
-- Tool registry (file/git/shell/docker/http + MCP stub)  
-- Evaluation harness + golden benchmarks + improvement proposals  
-- Web dashboard (REST + WebSocket)  
-- Remote workers (enroll / heartbeat / assign)
-
----
-
-## Quick start (on Control Plane host)
+## Operations Autopilot (v5.6)
 
 ```bash
-git clone https://github.com/RaCzKoViC/AgentBox.git
-cd AgentBox
-./install.sh          # runs agentbox-deploy-guard when configured
-agent5 version
-agent5 selftest
-agent5 web start
-agent5 web token      # paste into http://<host>:8787/login
+agent5 ops status
+agent5 ops scan
+agent5 ops remediate --dry-run          # default dry-run
+agent5 ops remediate --apply            # auto low-risk only
+agent5 ops playbook list
+agent5 ops playbook run clear_stale_pids --apply
+agent5 ops drift
+agent5 ops forecast
+agent5 ops cleanup --dry-run
+agent5 ops backup-schedule
+agent5 ops readiness
+agent5 ops plan --list
 ```
 
-Shared live terminal (Termius + desktop):
+Pragmatic playbooks: `clear_stale_pids`, `prune_old_logs`, `smart_backup`, `restart_web_if_down`, `detect_config_drift` (LOW/auto). HIGH: `quarantine_worker`, `restore_backup`.
+
+REST: `/api/v1/ops/status|scan|remediate|playbooks|drift|forecast|cleanup|backup-schedule|readiness|plans`  
+Dashboard: **Ops** page.
+
+Doctor version check accepts any semver `5.x.y`.
+
+## Evaluation (v5.5) / Tools (v5.4) / Planning (v5.3) / …
 
 ```bash
-agentbox-live    # tmux attach -t agentbox-live
+agent5 eval list|run golden
+agent5 tool list|run …
+agent5 goal create … / agent5 plan create …
+agent5 intelligence status|search …
+agent5 worker list
 ```
 
----
+## Install
 
-## Documentation
-
-| Doc | Description |
-|-----|-------------|
-| [docs/AGENTS.md](docs/AGENTS.md) | All agents & capabilities |
-| [docs/SSH_AND_DEPLOY.md](docs/SSH_AND_DEPLOY.md) | SSH / Tailscale / Termius / deploy guard |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layered architecture |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Version history & next steps |
-| Specs under `docs/*-spec.md` | Design docs for each release |
-
----
-
-## CLI surface (high level)
-
-```text
-agent5 status | doctor | selftest | start|stop|restart
-agent5 task | queue | handoff | approval | policy | budget | risk
-agent5 memory | intelligence | goal | plan | workflow | tool
-agent5 worker | eval | benchmark | propose | backup | restore
-agent5 web start|stop|status|token
-agent5-worker enroll|start|status
+```bash
+cd /workspace/agentbox-v5
+./install.sh
+agent5 version   # 5.6.0
+agent5 doctor    # HEALTHY
+agent5 selftest  # RESULT: PASS
 ```
 
----
+## Next (not implemented)
 
-## License
-
-MIT — see [LICENSE](LICENSE).
+**TBD**

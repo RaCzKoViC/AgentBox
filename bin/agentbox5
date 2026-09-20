@@ -87,7 +87,8 @@ Usage:
   agentbox5 benchmark list
   agentbox5 propose list|show|approve|reject
   agentbox5 baseline show [SUITE]
-  agentbox5 selftest [--distributed] [--intelligence] [--tools] [--evaluation]
+  agentbox5 ops status|scan|remediate|playbook|drift|forecast|cleanup|backup-schedule
+  agentbox5 selftest [--distributed] [--intelligence] [--tools] [--evaluation] [--ops]
 
 Autonomous: AGENTBOX_AUTO_APPROVE=1 auto-approves non-CRITICAL.
 CRITICAL (force_push, privileged docker, /etc writes) still DENY.
@@ -96,7 +97,7 @@ USAGE
 }
 
 cmd_version() {
-  local ver="5.5.0"
+  local ver="5.6.0"
   if [[ -n "${VERSION_FILE:-}" && -f "$VERSION_FILE" ]]; then
     ver="$(tr -d '[:space:]' < "$VERSION_FILE")"
   fi
@@ -1226,6 +1227,10 @@ cmd_baseline() {
   python3 "${AGENTBOX_V5_LIB}/evaluation/cli.py" baseline "$@"
 }
 
+cmd_ops() {
+  python3 "${AGENTBOX_V5_LIB}/ops_autopilot/cli.py" "$@"
+}
+
 cmd_selftest() {
   echo "== agentbox5 selftest (5.5.0 Evaluation + Tools + Planning + Intelligence + Distributed + Stable) =="
   export AGENTBOX_AUTO_APPROVE=1
@@ -2017,9 +2022,14 @@ print("RESULT: PASS")
 PY
   echo "OK: evaluation selftest PASS"
 
+  # --- v5.6 ops autopilot ---
+  echo "== v5.6: ops autopilot =="
+  python3 "${AGENTBOX_V5_LIB}/ops/migrations.py" run --no-backup >/dev/null || true
+  AGENTBOX_V5_LIB="$AGENTBOX_V5_LIB" python3 "${AGENTBOX_V5_LIB}/ops_autopilot/selftest.py"
+  echo "OK: ops autopilot selftest PASS"
 
   echo "RESULT: PASS"
-  echo "OK: selftest PASS (v5.5 evaluation; v5.4 tools; v5.3 planning; v5.2 intelligence; v5.1 distributed; stable Ops; rc1 API/WS/Dashboard; beta3 Policy; beta2 Handoffs; beta1 memory)"
+  echo "OK: selftest PASS (v5.6 ops; v5.5 evaluation; v5.4 tools; v5.3 planning; v5.2 intelligence; v5.1 distributed; stable Ops; rc1 API/WS/Dashboard; beta3 Policy; beta2 Handoffs; beta1 memory)"
 }
 
 
@@ -2074,6 +2084,7 @@ main() {
     benchmark) cmd_benchmark "$@" ;;
     propose) cmd_propose "$@" ;;
     baseline) cmd_baseline "$@" ;;
+    ops) cmd_ops "$@" ;;
     goal) cmd_goal "$@" ;;
     plan) cmd_plan "$@" ;;
     workflow) cmd_workflow "$@" ;;

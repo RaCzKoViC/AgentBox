@@ -1,0 +1,17 @@
+# AgentBox v5.6 Operations Autopilot
+[autopilot]
+enabled = true
+auto_low_risk = true
+dry_run_default = true
+
+[thresholds]
+disk_warn_pct = 80
+disk_crit_pct = 90
+logs_warn_mb = 256
+backup_stale_hours = 48
+
+[playbooks]
+# LOW risk may auto-apply when remediate --apply
+low_risk = ["clear_stale_pids", "prune_old_logs", "smart_backup", "restart_web_if_down", "detect_config_drift"]
+# HIGH risk always requires approval
+high_risk = ["quarantine_worker", "restore_backup"]

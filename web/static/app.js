@@ -309,6 +309,75 @@ async function renderEval() {
 }
 
 
+
+async function renderOps() {
+  const [st, scan, pbs, fc, drift, plans, rem] = await Promise.all([
+    api('/api/v1/ops/status').catch(()=>({})),
+    api('/api/v1/ops/scan').catch(()=>({proposals:[]})),
+    api('/api/v1/ops/playbooks').catch(()=>({playbooks:[]})),
+    api('/api/v1/ops/forecast').catch(()=>({})),
+    api('/api/v1/ops/drift').catch(()=>({scopes:{}})),
+    api('/api/v1/ops/plans').catch(()=>({plans:[]})),
+    api('/api/v1/ops/remediations?limit=20').catch(()=>({actions:[]})),
+  ]);
+  const doc = st.doctor || {};
+  const res = (fc.resources) || ((st.forecast||{}).resources) || {};
+  const pbRows = (pbs.playbooks||[]).map(p => `<tr>
+    <td>${escapeHtml(p.id||'')}</td>
+    <td>${escapeHtml(p.title||'')}</td>
+    <td>${escapeHtml(p.risk_level||'')}</td>
+    <td>${p.auto_eligible?'auto':'approval'}</td>
+    <td>${escapeHtml(p.description||'')}</td>
+  </tr>`).join('');
+  const propRows = (scan.proposals||[]).map(p => `<tr>
+    <td>${escapeHtml(p.playbook_id||'')}</td>
+    <td>${escapeHtml(p.risk_level||'')}</td>
+    <td>${p.auto?'yes':'no'}</td>
+    <td>${escapeHtml(p.reason||'')}</td>
+  </tr>`).join('');
+  const remRows = (rem.actions||[]).map(a => `<tr>
+    <td>${escapeHtml(a.id||'')}</td>
+    <td>${escapeHtml(a.action_type||'')}</td>
+    <td>${escapeHtml(a.risk_level||'')}</td>
+    <td>${escapeHtml(a.status||'')}</td>
+    <td>${escapeHtml(a.created_at||'')}</td>
+  </tr>`).join('');
+  const planRows = (plans.plans||[]).map(p => `<tr>
+    <td>${escapeHtml(p.id||'')}</td>
+    <td>${escapeHtml(p.title||'')}</td>
+    <td>${escapeHtml(p.priority||'')}</td>
+    <td>${escapeHtml(p.status||'')}</td>
+    <td>${(p.actions||[]).length}</td>
+  </tr>`).join('');
+  const sigRows = (fc.signals||(st.forecast||{}).signals||[]).map(s => `<tr>
+    <td>${escapeHtml(s.level||'')}</td>
+    <td>${escapeHtml(s.code||'')}</td>
+    <td>${escapeHtml(s.message||'')}</td>
+  </tr>`).join('');
+  content.innerHTML = cards([
+    ['Doctor', doc.health||'—'],
+    ['Forecast', fc.level||(st.forecast||{}).level||'—'],
+    ['Drift', drift.drifted?'yes':'no'],
+    ['Playbooks', (pbs.playbooks||[]).length],
+    ['Disk %', res.disk_percent??'—'],
+    ['DB MB', res.db_mb??'—'],
+  ]) + `<h3>Forecast signals</h3>
+  <table class="tbl"><thead><tr><th>Level</th><th>Code</th><th>Message</th></tr></thead>
+  <tbody>${sigRows||'<tr><td colspan=3>None</td></tr>'}</tbody></table>
+  <h3>Scan proposals</h3>
+  <table class="tbl"><thead><tr><th>Playbook</th><th>Risk</th><th>Auto</th><th>Reason</th></tr></thead>
+  <tbody>${propRows||'<tr><td colspan=4>No proposals</td></tr>'}</tbody></table>
+  <h3>Playbooks</h3>
+  <table class="tbl"><thead><tr><th>ID</th><th>Title</th><th>Risk</th><th>Mode</th><th>Description</th></tr></thead>
+  <tbody>${pbRows||'<tr><td colspan=5>None</td></tr>'}</tbody></table>
+  <h3>Recent remediations</h3>
+  <table class="tbl"><thead><tr><th>ID</th><th>Action</th><th>Risk</th><th>Status</th><th>When</th></tr></thead>
+  <tbody>${remRows||'<tr><td colspan=5>None</td></tr>'}</tbody></table>
+  <h3>Maintenance plans</h3>
+  <table class="tbl"><thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Status</th><th>Actions</th></tr></thead>
+  <tbody>${planRows||'<tr><td colspan=5>None</td></tr>'}</tbody></table>`;
+}
+
 async function renderMetrics() {
   const m = await api('/api/v1/metrics');
   const sys = m.system || {};
@@ -336,6 +405,7 @@ async function route() {
     else if (page === 'plans') await renderPlans();
     else if (page === 'tools') await renderTools();
     else if (page === 'eval') await renderEval();
+    else if (page === 'ops') await renderOps();
     else if (page === 'metrics') await renderMetrics();
     else content.innerHTML = '<p class="muted">Unknown page</p>';
   } catch (e) {

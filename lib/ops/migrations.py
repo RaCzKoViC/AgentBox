@@ -523,6 +523,14 @@ def mig_0010_evaluation(conn) -> None:
 
 
 
+
+def mig_0011_ops_autopilot(conn) -> None:
+    """v5.6: ops autopilot playbooks, remediation, drift, maintenance plans."""
+    from ops_autopilot import store
+    store.ensure_schema(conn)
+
+
+
 MIGRATIONS: list[tuple[int, str, MigrationFn]] = [
     (5, "stable_hardening", mig_0005_stable_hardening),
     (6, "distributed_workers", mig_0006_distributed_workers),
@@ -530,6 +538,7 @@ MIGRATIONS: list[tuple[int, str, MigrationFn]] = [
     (8, "planning", mig_0008_planning),
     (9, "tools", mig_0009_tools),
     (10, "evaluation", mig_0010_evaluation),
+    (11, "ops_autopilot", mig_0011_ops_autopilot),
 ]
 
 

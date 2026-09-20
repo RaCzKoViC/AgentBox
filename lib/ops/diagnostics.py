@@ -36,7 +36,10 @@ def doctor() -> dict[str, Any]:
         checks.append({"name": name, "ok": ok, "detail": detail})
 
     ver = read_version()
-    add("version", ver == "5.0.0", ver)
+    # v5.6+: any semver 5.x.y (and current VERSION file) is healthy
+    import re
+    ver_ok = bool(re.match(r"^5\.\d+\.\d+", ver or ""))
+    add("version", ver_ok, ver)
 
     qc = quick_check()
     add("db_quick_check", qc["ok"], qc.get("result"))

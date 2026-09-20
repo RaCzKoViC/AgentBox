@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install AgentBox v5.5.0 (Evaluation + Tools + Planning + Intelligence + Distributed)
+# Install AgentBox v5.6.0 (Ops Autopilot + Evaluation + Tools + Planning + Intelligence + Distributed)
 set -euo pipefail
 
 command -v agentbox-deploy-guard >/dev/null 2>&1 || { echo "[ERR] guard missing"; exit 1; }
@@ -82,7 +82,7 @@ if [[ -f "$ROOT/bin/agentbox-deploy-guard" ]]; then
 fi
 
 # Refresh configs
-for f in policies.toml budgets.toml agentbox.toml providers.toml memory.toml agents.toml policies.ini recovery.ini backup.ini web.ini intelligence.toml tools.toml evaluation.toml; do
+for f in policies.toml budgets.toml agentbox.toml providers.toml memory.toml agents.toml policies.ini recovery.ini backup.ini web.ini intelligence.toml tools.toml evaluation.toml ops_autopilot.toml; do
   if [[ -f "$ROOT/config/$f" ]]; then
     cp -f "$ROOT/config/$f" "$DATA_ROOT/config/$f"
     echo "  config: refreshed $f"
