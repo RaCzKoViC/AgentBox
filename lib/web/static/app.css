@@ -318,3 +318,11 @@ button.ghost { background: transparent; border: 1px solid var(--border); color: 
   .bottom-nav a.active { color: var(--accent); }
   .cards { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 }
+
+/* v5.6.3 pending decisions ("Czeka na Macieja") */
+.badge { display:inline-block; min-width:1.2em; padding:0 .4em; margin-left:.35em; border-radius:999px; background:#d97706; color:#111; font-size:.72rem; font-weight:700; text-align:center; line-height:1.4; }
+.pending-list { list-style:none; margin:.5rem 0 0; padding:0; display:flex; flex-direction:column; gap:.5rem; }
+.pending-item { padding:.55rem .7rem; border:1px solid rgba(255,255,255,.08); border-left:3px solid #d97706; border-radius:6px; background:rgba(255,255,255,.02); }
+.pending-item.resolved { border-left-color:#16a34a; opacity:.75; }
+.pending-text { font-weight:600; }
+.pending-ctx, .pending-meta { font-size:.78rem; margin-top:.2rem; }

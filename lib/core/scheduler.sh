@@ -16,13 +16,13 @@ _ab5_scheduler_py() {
 ab5_scheduler_pick_ready() {
   local max_n="${1:-1}"
   ab5_ensure_env
-  python3 "$(_ab5_scheduler_py)" pick-ready --max "$max_n"
+  "${AGENTBOX_V5_PYTHON:-python3}" "$(_ab5_scheduler_py)" pick-ready --max "$max_n"
 }
 
 ab5_scheduler_pick_for_workers() {
   local mw="${1:-2}"
   ab5_ensure_env
-  python3 "$(_ab5_scheduler_py)" pick-for-workers --max-workers "$mw"
+  "${AGENTBOX_V5_PYTHON:-python3}" "$(_ab5_scheduler_py)" pick-for-workers --max-workers "$mw"
 }
 
 ab5_scheduler_tick() {
@@ -44,7 +44,7 @@ ab5_read_max_workers() {
       return
     fi
   fi
-  python3 -c '
+  "${AGENTBOX_V5_PYTHON:-python3}" -c '
 import sys
 try:
     import tomllib

@@ -29,3 +29,7 @@ auto_approve_plan = true
 auto_approve_changes = true
 auto_merge = true
 bypass_approvals = true
+
+# [doctor]
+# allowed hostnames for `agent5 doctor` (mismatch = WARN, not FAIL); set per box in the live config
+# expected_hostnames = ["my-box-hostname"]

@@ -24,6 +24,12 @@ async function api(path, opts={}) {
   return r.json();
 }
 
+// true when the user navigated away while a render was awaiting API calls
+function staleRender(page) {
+  const cur = (location.hash.replace(/^#/, '') || 'overview').split('/')[0];
+  return cur !== page;
+}
+
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -95,6 +101,10 @@ async function renderOverview() {
     api('/api/v1/ops/status').catch(()=>({})),
     api('/api/v1/ops/forecast').catch(()=>({})),
   ]);
+  const pend = await api('/api/v1/pending?status=open').catch(()=>({items:[]}));
+  const pendItems = pend.items || [];
+  refreshPendingBadge(pendItems);
+  if (staleRender('overview')) return;
   const doc = ops.doctor || {};
   const forecast = fc.level || (ops.forecast || {}).level || '—';
   const docHealth = doc.health || doc.status || '—';
@@ -124,6 +134,10 @@ async function renderOverview() {
       ['CPU %', Number(s.system?.cpu_percent ?? 0).toFixed(1), false],
       ['RAM %', Number(s.system?.memory_percent ?? 0).toFixed(1), false],
     ])}
+    <div class="panel-block" id="overview-pending">
+      <div class="row-between"><h3>Czeka na Macieja</h3><a href="#pending" class="muted">${pendItems.length} open →</a></div>
+      ${pendingList(pendItems, false)}
+    </div>
     <div class="panel-block">
       <div class="row-between">
         <h3>Quick actions</h3>
@@ -631,6 +645,85 @@ async function renderOps() {
   };
 }
 
+// v5.6.3: "Czeka na Macieja" — pending user decisions
+async function refreshPendingBadge(items) {
+  const el = document.getElementById('pending-count');
+  if (!el) return;
+  try {
+    const list = items || ((await api('/api/v1/pending?status=open')).items || []);
+    el.textContent = list.length ? String(list.length) : '';
+    el.hidden = !list.length;
+  } catch { /* ignore */ }
+}
+
+function fmtLocalTs(s) {
+  if (!s) return '';
+  const d = new Date(s);
+  return isNaN(d) ? String(s) : d.toLocaleString('pl-PL', {dateStyle: 'short', timeStyle: 'short'});
+}
+
+function pendingList(items, withActions) {
+  if (!items.length) return emptyState('Nic nie czeka', 'Brak otwartych decyzji.');
+  return `<ul class="pending-list">${items.map(it => `
+    <li class="pending-item ${it.status === 'resolved' ? 'resolved' : ''}">
+      <div class="pending-text">${escapeHtml(it.text)}</div>
+      ${it.context ? `<div class="muted pending-ctx">${escapeHtml(it.context)}</div>` : ''}
+      <div class="pending-meta muted">${escapeHtml(it.id)} · ${escapeHtml(fmtLocalTs(it.created_at))}
+        ${it.status === 'resolved' ? ' · resolved ' + escapeHtml(fmtLocalTs(it.resolved_at)) + (it.resolution ? ' — ' + escapeHtml(it.resolution) : '') : ''}</div>
+      ${withActions && it.status === 'open' ? `<div class="actions" style="margin:.35rem 0 0">
+        <button type="button" data-pid="${escapeHtml(it.id)}" data-pact="resolve">Oznacz jako rozwiązane</button></div>` : ''}
+      ${withActions && it.status === 'resolved' ? `<div class="actions" style="margin:.35rem 0 0">
+        <button type="button" class="ghost" data-pid="${escapeHtml(it.id)}" data-pact="reopen">Otwórz ponownie</button></div>` : ''}
+    </li>`).join('')}</ul>`;
+}
+
+async function renderPending() {
+  const [open, all] = await Promise.all([
+    api('/api/v1/pending?status=open'),
+    api('/api/v1/pending?status=resolved'),
+  ]);
+  const items = open.items || [];
+  const done = all.items || [];
+  refreshPendingBadge(items);
+  if (staleRender('pending')) return;
+  content.innerHTML = `
+    <div class="panel-block" id="pending-panel">
+      <div class="row-between"><h3>Czeka na Macieja</h3><span class="pill ${items.length ? 'warn' : 'ok'}">${items.length} open</span></div>
+      ${pendingList(items, true)}
+      <div id="pending-flash" hidden></div>
+    </div>
+    <div class="panel-block">
+      <h3>Dodaj decyzję</h3>
+      <form id="pending-form" class="form-grid">
+        <label class="full">Tekst<input name="text" required placeholder="Co wymaga decyzji?"/></label>
+        <label class="full">Kontekst<input name="context" placeholder="Opcjonalnie"/></label>
+        <div class="full actions"><button type="submit">Dodaj</button></div>
+      </form>
+    </div>
+    <details class="panel-block"><summary>Rozwiązane (${done.length})</summary>${pendingList(done.slice().reverse(), true)}</details>`;
+  const flash = document.getElementById('pending-flash');
+  content.querySelectorAll('button[data-pact]').forEach(btn => {
+    btn.onclick = async () => {
+      try {
+        let resolution = '';
+        if (btn.dataset.pact === 'resolve') resolution = prompt('Decyzja / notatka (opcjonalnie):', '') || '';
+        await api(`/api/v1/pending/${btn.dataset.pid}`, {method:'PATCH',
+          body: {status: btn.dataset.pact === 'resolve' ? 'resolved' : 'open', resolution}});
+        renderPending();
+      } catch (e) { flash.hidden = false; flash.className = 'flash err'; flash.textContent = e.message; }
+    };
+  });
+  const form = document.getElementById('pending-form');
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    try {
+      await api('/api/v1/pending', {method:'POST', body:{text: fd.get('text'), context: fd.get('context') || '', source: 'dashboard'}});
+      renderPending();
+    } catch (ex) { flash.hidden = false; flash.className = 'flash err'; flash.textContent = ex.message; }
+  };
+}
+
 async function renderMetrics() {
   const m = await api('/api/v1/metrics');
   const sys = m.system || {};
@@ -649,7 +742,7 @@ async function route() {
   const titles = {
     overview:'Overview', tasks:'Tasks', task:'Task detail', approvals:'Approvals',
     handoffs:'Handoffs', agents:'Agents', nodes:'Nodes', intelligence:'Intelligence',
-    plans:'Plans', tools:'Tools', eval:'Eval', ops:'Ops', metrics:'Metrics',
+    plans:'Plans', tools:'Tools', eval:'Eval', ops:'Ops', metrics:'Metrics', pending:'Czeka na Macieja',
   };
   pageTitle.textContent = titles[page] || (page.charAt(0).toUpperCase() + page.slice(1));
   document.querySelectorAll('.sidebar nav a, .bottom-nav a').forEach(a => {
@@ -672,6 +765,7 @@ async function route() {
     else if (page === 'eval') await renderEval();
     else if (page === 'ops') await renderOps();
     else if (page === 'metrics') await renderMetrics();
+    else if (page === 'pending') await renderPending();
     else content.innerHTML = '<p class="muted">Unknown page</p>';
   } catch (e) {
     if (e.message !== 'auth') content.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`;
@@ -725,6 +819,7 @@ document.querySelectorAll('#main-nav a').forEach(a => a.addEventListener('click'
 window.addEventListener('hashchange', route);
 route();
 connectWs();
+refreshPendingBadge();
 setInterval(() => {
   const h = location.hash || '#overview';
   if (h === '#overview' || h === '') route();

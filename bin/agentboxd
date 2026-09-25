@@ -80,8 +80,8 @@ _spawn_worker() {
   # --- alpha3 Safety: policy gate (auto-approve) + budget ---
   export AGENTBOX_AUTO_APPROVE="${AGENTBOX_AUTO_APPROVE:-1}"
   local gate_json
-  gate_json="$(python3 "${AGENTBOX_V5_LIB}/policy/approvals.py" ensure-gate "$tid" 2>/dev/null || echo '{}')"
-  if python3 -c 'import json,sys
+  gate_json="$("${AGENTBOX_V5_PYTHON:-python3}" "${AGENTBOX_V5_LIB}/policy/approvals.py" ensure-gate "$tid" 2>/dev/null || echo '{}')"
+  if "${AGENTBOX_V5_PYTHON:-python3}" -c 'import json,sys
 d=json.load(sys.stdin)
 raise SystemExit(0 if isinstance(d,dict) and d.get("denied") else 1)
 ' <<<"$gate_json" 2>/dev/null; then
@@ -89,15 +89,15 @@ raise SystemExit(0 if isinstance(d,dict) and d.get("denied") else 1)
     return 1
   fi
   # Pending only when AUTO_APPROVE=0
-  if python3 -c 'import json,sys
+  if "${AGENTBOX_V5_PYTHON:-python3}" -c 'import json,sys
 d=json.load(sys.stdin)
 raise SystemExit(0 if isinstance(d,dict) and d.get("status")=="pending" else 1)
 ' <<<"$gate_json" 2>/dev/null; then
     dlog "awaiting_approval task=$tid — defer (AUTO_APPROVE off)"
     return 1
   fi
-  if ! python3 "${AGENTBOX_V5_LIB}/policy/budgets.py" check "$tid" >/dev/null 2>&1; then
-    python3 "${AGENTBOX_V5_LIB}/policy/budgets.py" pause "$tid" "daemon: budget check failed" >/dev/null 2>&1 || true
+  if ! "${AGENTBOX_V5_PYTHON:-python3}" "${AGENTBOX_V5_LIB}/policy/budgets.py" check "$tid" >/dev/null 2>&1; then
+    "${AGENTBOX_V5_PYTHON:-python3}" "${AGENTBOX_V5_LIB}/policy/budgets.py" pause "$tid" "daemon: budget check failed" >/dev/null 2>&1 || true
     dlog "paused_budget task=$tid — skip"
     return 1
   fi
@@ -106,7 +106,7 @@ raise SystemExit(0 if isinstance(d,dict) and d.get("status")=="pending" else 1)
   local claimed
   claimed="$(ab5_db claim "$tid" 2>/dev/null || echo '{}')"
   local cid
-  cid="$(python3 -c 'import json,sys
+  cid="$("${AGENTBOX_V5_PYTHON:-python3}" -c 'import json,sys
 try:
   d=json.load(sys.stdin)
   print(d.get("id","") if isinstance(d,dict) else "")
@@ -156,7 +156,7 @@ cmd_status() {
   echo "worker_pids=$running_pids"
   if [[ -f "$AGENTBOX_V5_DB" ]]; then
     stats="$(ab5_db queue-stats 2>/dev/null || echo '{}')"
-    python3 -c '
+    "${AGENTBOX_V5_PYTHON:-python3}" -c '
 import json,sys
 d=json.load(sys.stdin)
 print("queued=%s ready=%s running=%s completed=%s failed=%s" % (
@@ -240,7 +240,7 @@ daemon_loop() {
     _reap_workers
     # beta2: resource sampler ~every 5s (soft-fail)
     if [[ $((tick - last_sample)) -ge "$sample_every" ]] || [[ "$tick" -eq 0 ]]; then
-      python3 "${AGENTBOX_V5_LIB}/observability/sampler.py" >/dev/null 2>&1 || true
+      "${AGENTBOX_V5_PYTHON:-python3}" "${AGENTBOX_V5_LIB}/observability/sampler.py" >/dev/null 2>&1 || true
       last_sample=$tick
     fi
     max_workers="$(ab5_read_max_workers)"
@@ -260,7 +260,7 @@ daemon_loop() {
       local ready_json
       ready_json="$(ab5_scheduler_pick_ready "$slots" 2>/dev/null || echo '[]')"
       local ids
-      ids="$(python3 -c '
+      ids="$("${AGENTBOX_V5_PYTHON:-python3}" -c '
 import json,sys
 try:
   arr=json.load(sys.stdin)

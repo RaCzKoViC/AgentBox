@@ -67,6 +67,7 @@ Usage:
   agentbox5 backup create|list|inspect|verify|prune|export
   agentbox5 restore list|verify ID|ID
   agentbox5 doctor | diagnostics create
+  agentbox5 pending list [--all] | add "text" [--context C] | resolve ID [--note N]
   agentbox5 recover [--dry-run] | recovery scan|status|apply
   agentbox5 maintenance enter|exit|status
   agentbox5 integrity check|full
@@ -2172,6 +2173,17 @@ PY
 
 
 
+cmd_pending() {
+  # Pending user decisions ("Czeka na Macieja"): list|add "text" [--context C]|resolve ID [--note N]|reopen ID
+  ab5_ensure_env
+  local sub="${1:-list}"; shift || true
+  case "$sub" in
+    list|add|resolve|reopen|init)
+      "${AGENTBOX_V5_PYTHON:-python3}" "${AGENTBOX_V5_LIB}/ops/pending.py" "$sub" "$@" ;;
+    *) echo "usage: agent5 pending list [--all|--json] | add \"text\" [--context C] | resolve ID [--note N] | reopen ID" >&2; return 2 ;;
+  esac
+}
+
 main() {
   local cmd="${1:-}"; shift || true
   case "$cmd" in
@@ -2228,6 +2240,7 @@ main() {
     workflow) cmd_workflow "$@" ;;
     reflect) cmd_reflect "$@" ;;
     selftest) cmd_selftest "$@" ;;
+    pending) cmd_pending "$@" ;;
     help|-h|--help|"") usage ;;
     *) echo "unknown command: $cmd" >&2; usage; return 2 ;;
   esac

@@ -53,11 +53,13 @@ def create_app() -> FastAPI:
         health, status, tasks, runs, agents, handoffs, approvals,
         policies, budgets, risk, artifacts, memory, metrics, logs,
         providers, projects, settings, auth_routes, workers, intelligence, planning, tools, eval, ops,
+        pending,
     )
     for mod in (
         health, status, tasks, runs, agents, handoffs, approvals,
         policies, budgets, risk, artifacts, memory, metrics, logs,
         providers, projects, settings, auth_routes, workers, intelligence, planning, tools, eval, ops,
+        pending,
     ):
         app.include_router(mod.router)
 

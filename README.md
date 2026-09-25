@@ -1,4 +1,4 @@
-# AgentBox v5.6.2 — Operations Autopilot
+# AgentBox v5.6.3 — Operations Autopilot
 
 Versioned AgentBox v5 control plane. **v5.6 = Operations Autopilot** (playbooks, drift, forecast, cleanup, smart backup, remediation, upgrade readiness) on top of v5.5 Evaluation + v5.4 Tools + v5.3 Planning + v5.2 Intelligence + v5.1 Distributed Workers + Stable Ops.
 
@@ -8,6 +8,13 @@ Versioned AgentBox v5 control plane. **v5.6 = Operations Autopilot** (playbooks,
 >
 > **Deploy:** only host `cursor` / Tailscale `100.123.66.15` / user `box` / root `/workspace/agentbox-v5` — `agentbox-deploy-guard`.
 
+
+## v5.6.3
+
+Isolated `agent5 selftest`, doctor hostname WARN (`[doctor] expected_hostnames`), tasks `order=desc`,
+pending decisions panel ("Czeka na Macieja", `agent5 pending ...`, `/api/v1/pending`),
+daemon uses the AgentBox venv Python (`AGENTBOX_V5_PYTHON`). Deploy source → installed with
+`scripts/install.sh [--dry-run]`. See `CHANGELOG.md`.
 
 ## Dashboard (v5.6.2)
 
@@ -52,7 +59,7 @@ agent5 worker list
 ```bash
 cd /workspace/agentbox-v5
 ./install.sh
-agent5 version   # 5.6.2
+agent5 version   # 5.6.3
 agent5 doctor    # HEALTHY
 agent5 selftest  # RESULT: PASS
 ```

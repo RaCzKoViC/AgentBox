@@ -29,7 +29,7 @@ def main() -> int:
     from ops_autopilot.health_registry import evaluate as health_evaluate
 
     ver = read_version()
-    assert re.match(r"^5\.6\.2", ver), ver
+    assert re.match(r"^5\.6\.\d+", ver), ver
     doc = doctor()
     assert doc.get("ok"), doc
     print("OK: doctor HEALTHY version", ver, doc.get("health"))
@@ -91,10 +91,10 @@ def main() -> int:
     print("OK: backup-schedule", bs["decision"].get("needed"))
 
     st = status()
-    assert st.get("version") == "5.6.2", st
+    assert st.get("version") == ver, st
     print("OK: ops status")
 
-    rd = upgrade_readiness(target_version="5.6.2")
+    rd = upgrade_readiness(target_version=ver)
     assert "checks" in rd, rd
     print("OK: readiness ready=", rd.get("ready"), "blockers", rd.get("blockers"))
 
@@ -148,7 +148,7 @@ def main() -> int:
     print("OK: health score", health["score"], health["status"])
 
     st2 = status()
-    assert st2.get("version") == "5.6.2", st2
+    assert st2.get("version") == ver, st2
     assert "health" in st2 and "open_incidents" in st2, st2
     print("OK: ops status includes health+incidents")
 

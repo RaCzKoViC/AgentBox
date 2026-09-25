@@ -531,6 +531,12 @@ def mig_0011_ops_autopilot(conn) -> None:
 
 
 
+def mig_0012_pending_decisions(conn) -> None:
+    """v5.6.3: pending user decisions list (dashboard "Czeka na Macieja")."""
+    from ops import pending
+    pending.ensure_schema(conn)
+
+
 MIGRATIONS: list[tuple[int, str, MigrationFn]] = [
     (5, "stable_hardening", mig_0005_stable_hardening),
     (6, "distributed_workers", mig_0006_distributed_workers),
@@ -539,6 +545,7 @@ MIGRATIONS: list[tuple[int, str, MigrationFn]] = [
     (9, "tools", mig_0009_tools),
     (10, "evaluation", mig_0010_evaluation),
     (11, "ops_autopilot", mig_0011_ops_autopilot),
+    (12, "pending_decisions", mig_0012_pending_decisions),
 ]
 
 

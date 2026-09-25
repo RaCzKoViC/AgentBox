@@ -128,7 +128,7 @@ def evaluate(*, persist: bool = True) -> dict[str, Any]:
         "components": components,
         "doctor": {"health": doc.get("health"), "ok": doc.get("ok"), "failed": doc.get("failed")},
         "forecast_level": fc.get("level"),
-        "version": "5.6.2",
+        "version": _platform_version(),
     }
     if persist:
         with dbmod.connect() as conn:
@@ -136,3 +136,11 @@ def evaluate(*, persist: bool = True) -> dict[str, Any]:
             store.insert_health_sample(conn, {"score": score, "status": status, "components": components})
             conn.commit()
     return out
+
+
+def _platform_version() -> str:
+    try:
+        from ops.paths import read_version
+        return read_version()
+    except Exception:
+        return "5.6.3"

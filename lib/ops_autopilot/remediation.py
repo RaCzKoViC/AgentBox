@@ -55,7 +55,7 @@ def status() -> dict[str, Any]:
         "maintenance_plans": plans,
         "health": health,
         "open_incidents": open_incidents,
-        "version": "5.6.2",
+        "version": _platform_version(),
     }
 
 
@@ -250,3 +250,11 @@ def remediate(
 
 def apply_approved(approval_id: str, playbook_id: str) -> dict[str, Any]:
     return remediate(playbook_id=playbook_id, dry_run=False, approval_id=approval_id, allow_high_risk=True)
+
+
+def _platform_version() -> str:
+    try:
+        from ops.paths import read_version
+        return read_version()
+    except Exception:
+        return "5.6.3"

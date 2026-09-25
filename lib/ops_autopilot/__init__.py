@@ -1,7 +1,16 @@
 """AgentBox v5.6 — Operations Autopilot & Autonomous Platform Maintenance."""
 from __future__ import annotations
 
-VERSION = "5.6.2"
+def _platform_version() -> str:
+    """Platform version from the VERSION file (single source of truth)."""
+    try:
+        from ops.paths import read_version
+        return read_version()
+    except Exception:
+        return "5.6.3"
+
+
+VERSION = _platform_version()
 
 __all__ = [
     "VERSION",

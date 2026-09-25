@@ -11,7 +11,7 @@ ab5_runner_backend() {
   local cfg="${AGENTBOX_V5_HOME}/config/agentbox.toml"
   local backend="codex"
   if [[ -f "$cfg" ]]; then
-    backend="$(python3 - "$cfg" <<'PY'
+    backend="$("${AGENTBOX_V5_PYTHON:-python3}" - "$cfg" <<'PY'
 import re, sys
 from pathlib import Path
 t = Path(sys.argv[1]).read_text()
@@ -34,7 +34,7 @@ PY
 
 ab5_task_field() {
   local tid="$1" field="$2"
-  python3 - "$tid" "$field" <<'PY'
+  "${AGENTBOX_V5_PYTHON:-python3}" - "$tid" "$field" <<'PY'
 import sqlite3, sys, os
 tid, field = sys.argv[1], sys.argv[2]
 con = sqlite3.connect(os.environ["AGENTBOX_V5_DB"])
@@ -50,7 +50,7 @@ ab5_build_memory_context() {
   local tid="$1"
   local max_tokens="${2:-2000}"
   if [[ -f "${AGENTBOX_V5_LIB}/memory/context.py" ]]; then
-    python3 "${AGENTBOX_V5_LIB}/memory/context.py" build "$tid" --max-tokens "$max_tokens" --text-only 2>/dev/null \
+    "${AGENTBOX_V5_PYTHON:-python3}" "${AGENTBOX_V5_LIB}/memory/context.py" build "$tid" --max-tokens "$max_tokens" --text-only 2>/dev/null \
       || true
   fi
 }
@@ -113,7 +113,7 @@ ab5_run_codex() {
   [[ -n "$project" && -d "$project" ]] || { echo "bad project=$project" >&2; return 1; }
 
   if [[ -f "${AGENTBOX_V5_LIB}/policy/approvals.py" ]]; then
-    python3 "${AGENTBOX_V5_LIB}/policy/approvals.py" ensure-gate "$task_id" >/dev/null 2>&1 || true
+    "${AGENTBOX_V5_PYTHON:-python3}" "${AGENTBOX_V5_LIB}/policy/approvals.py" ensure-gate "$task_id" >/dev/null 2>&1 || true
   fi
 
   local worktree
@@ -121,7 +121,7 @@ ab5_run_codex() {
 
   local run_json run_id outdir
   run_json="$(ab5_db create-run "$task_id" --worker "$worker_id")"
-  run_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$run_json")"
+  run_id="$("${AGENTBOX_V5_PYTHON:-python3}" -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$run_json")"
   outdir="${AGENTBOX_V5_HOME}/data/artifacts/${task_id}/${run_id}"
   mkdir -p "$outdir"
 
@@ -134,7 +134,7 @@ ab5_run_codex() {
 
   for stage in "${stages[@]}"; do
     ab5_db emit --kind "stage.started" --message "$stage" --task "$task_id" --run "$run_id" >/dev/null || true
-    python3 - "$task_id" "$stage" <<'PY' 2>/dev/null || true
+    "${AGENTBOX_V5_PYTHON:-python3}" - "$task_id" "$stage" <<'PY' 2>/dev/null || true
 import os, sqlite3, sys
 tid, stage = sys.argv[1], sys.argv[2]
 con = sqlite3.connect(os.environ["AGENTBOX_V5_DB"])
@@ -188,7 +188,7 @@ Rules:
   done
 
   # Optional auto-merge when autonomy.auto_merge=true
-  if python3 - <<PY 2>/dev/null
+  if "${AGENTBOX_V5_PYTHON:-python3}" - <<PY 2>/dev/null
 from pathlib import Path
 import re, sys
 t = Path("${AGENTBOX_V5_HOME}/config/agentbox.toml").read_text()
@@ -228,7 +228,7 @@ ab5_run_stub() {
   ab5_ensure_env
   local run_json run_id
   run_json="$(ab5_db create-run "$task_id" --worker "$worker_id")"
-  run_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$run_json")"
+  run_id="$("${AGENTBOX_V5_PYTHON:-python3}" -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$run_json")"
   ab5_db emit --kind "plan.stub" --message "stub fallback" --task "$task_id" --run "$run_id" >/dev/null || true
   sleep 1
   ab5_db emit --kind "runner.stub" --message "Stub runner completed" --task "$task_id" --run "$run_id" >/dev/null || true
