@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI: agent5 ops status|scan|remediate|playbook|drift|forecast|cleanup|backup-schedule|readiness|plan"""
+"""CLI: agent5 ops status|scan|remediate|playbook|drift|forecast|cleanup|backup-schedule|readiness|plan|health|incident|runbook|restore-drill"""
 from __future__ import annotations
 
 import argparse
@@ -135,6 +135,92 @@ def cmd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+
+def cmd_health(_args: argparse.Namespace) -> int:
+    from ops_autopilot.health_registry import evaluate
+    _print(evaluate(persist=True))
+    return 0
+
+
+def cmd_incident_list(args: argparse.Namespace) -> int:
+    from ops_autopilot.incidents import list_incidents
+    items = list_incidents(status=args.status, limit=args.limit)
+    _print({"incidents": items, "count": len(items)})
+    return 0
+
+
+def cmd_incident_show(args: argparse.Namespace) -> int:
+    from ops_autopilot.incidents import get_incident
+    inc = get_incident(args.incident_id)
+    if not inc:
+        _print({"error": "not found", "id": args.incident_id})
+        return 1
+    _print(inc)
+    return 0
+
+
+def cmd_incident_close(args: argparse.Namespace) -> int:
+    from ops_autopilot.incidents import close_incident
+    try:
+        out = close_incident(
+            args.incident_id,
+            message=args.message or "closed via CLI",
+            resolution={"message": args.message or "closed via CLI", "confirmed": True},
+        )
+    except ValueError as e:
+        _print({"error": str(e)})
+        return 1
+    _print(out)
+    return 0
+
+
+def cmd_runbook_list(_args: argparse.Namespace) -> int:
+    from ops_autopilot.runbooks import list_runbooks
+    items = list_runbooks()
+    _print({"runbooks": items, "count": len(items)})
+    return 0
+
+
+def cmd_runbook_run(args: argparse.Namespace) -> int:
+    from ops_autopilot.runbooks import run_runbook
+    dry = not args.apply
+    if getattr(args, "dry_run", False):
+        dry = True
+    try:
+        result = run_runbook(
+            args.runbook_id,
+            dry_run=dry,
+            allow_high_risk=args.allow_high_risk,
+            triggered_by="cli",
+        )
+    except ValueError as e:
+        _print({"error": str(e)})
+        return 1
+    _print(result)
+    return 0 if result.get("status") in ("passed", "awaiting_approval") else 1
+
+
+def cmd_restore_drill(args: argparse.Namespace) -> int:
+    from ops_autopilot.restore_drill import run_restore_drill, list_drills
+    if args.list:
+        drills = list_drills(limit=args.limit)
+        _print({"drills": drills, "count": len(drills)})
+        return 0
+    result = run_restore_drill(
+        backup_id=args.backup_id,
+        approve_destructive=bool(args.approve_destructive),
+        note=args.note or "ops restore-drill",
+    )
+    _print(result)
+    return 0 if result.get("ok") else 1
+
+
+def cmd_anomaly_scan(args: argparse.Namespace) -> int:
+    from ops_autopilot.anomalies import detect
+    _print(detect(persist=not args.no_persist, raise_incidents=not args.no_incidents))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="agent5 ops")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -184,11 +270,52 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("--title", default=None)
     pl.add_argument("--limit", type=int, default=20)
 
+    sub.add_parser("health")
+
+    inc = sub.add_parser("incident")
+    inc_sub = inc.add_subparsers(dest="inc_cmd", required=True)
+    il = inc_sub.add_parser("list")
+    il.add_argument("--status", default=None)
+    il.add_argument("--limit", type=int, default=50)
+    ish = inc_sub.add_parser("show")
+    ish.add_argument("incident_id")
+    icl = inc_sub.add_parser("close")
+    icl.add_argument("incident_id")
+    icl.add_argument("--message", default=None)
+
+    # also accept `ops incidents` as alias via main argv rewrite
+
+    rb = sub.add_parser("runbook")
+    rb_sub = rb.add_subparsers(dest="rb_cmd", required=True)
+    rb_sub.add_parser("list")
+    rbr = rb_sub.add_parser("run")
+    rbr.add_argument("runbook_id")
+    rbr.add_argument("--apply", action="store_true")
+    rbr.add_argument("--dry-run", action="store_true")
+    rbr.add_argument("--allow-high-risk", action="store_true")
+
+    rd = sub.add_parser("restore-drill")
+    rd.add_argument("--list", action="store_true")
+    rd.add_argument("--backup-id", default=None)
+    rd.add_argument("--approve-destructive", action="store_true")
+    rd.add_argument("--note", default=None)
+    rd.add_argument("--limit", type=int, default=20)
+
+    an = sub.add_parser("anomaly-scan")
+    an.add_argument("--no-persist", action="store_true")
+    an.add_argument("--no-incidents", action="store_true")
+
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(argv) if argv is not None else sys.argv[1:]
+    # aliases
+    if argv and argv[0] == "incidents":
+        argv = ["incident", "list", *argv[1:]]
+    if argv and argv[0] == "runbooks":
+        argv = ["runbook", "list", *argv[1:]]
+
     # allow `ops --dry-run remediate` style from wrapper: strip global --dry-run into remediate
     global_dry = False
     if "--dry-run" in argv and argv[0] not in ("remediate", "cleanup", "playbook", "scan"):
@@ -226,6 +353,24 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_readiness(args)
     if args.cmd == "plan":
         return cmd_plan(args)
+    if args.cmd == "health":
+        return cmd_health(args)
+    if args.cmd == "incident":
+        if args.inc_cmd == "list":
+            return cmd_incident_list(args)
+        if args.inc_cmd == "show":
+            return cmd_incident_show(args)
+        if args.inc_cmd == "close":
+            return cmd_incident_close(args)
+    if args.cmd == "runbook":
+        if args.rb_cmd == "list":
+            return cmd_runbook_list(args)
+        if args.rb_cmd == "run":
+            return cmd_runbook_run(args)
+    if args.cmd == "restore-drill":
+        return cmd_restore_drill(args)
+    if args.cmd == "anomaly-scan":
+        return cmd_anomaly_scan(args)
     parser.print_help()
     return 2
 

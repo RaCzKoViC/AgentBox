@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentbox.local/schemas/openai-yaml.schema.json",
+  "title": "agents/openai.yaml",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "interface": {
+      "type": "object",
+      "properties": {
+        "display_name": { "type": "string" },
+        "short_description": { "type": "string" },
+        "icon_small": { "type": "string" },
+        "icon_large": { "type": "string" },
+        "brand_color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "default_prompt": { "type": "string" }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "allow_implicit_invocation": { "type": "boolean" }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type", "value"],
+            "properties": {
+              "type": { "type": "string", "enum": ["mcp"] },
+              "value": { "type": "string" },
+              "description": { "type": "string" },
+              "transport": { "type": "string" },
+              "url": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

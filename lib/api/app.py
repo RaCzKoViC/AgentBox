@@ -84,7 +84,9 @@ def create_app() -> FastAPI:
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(request: Request):
         return templates.TemplateResponse(
-            request, "login.html", {"title": "Login — AgentBox"}
+            request,
+            "login.html",
+            {"title": "Login — AgentBox", "version": version_str()},
         )
 
     return app

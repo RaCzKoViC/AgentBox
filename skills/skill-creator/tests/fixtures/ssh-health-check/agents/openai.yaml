@@ -1,0 +1,8 @@
+interface:
+  display_name: "SSH Health Check"
+  short_description: "Diagnose SSH auth and connectivity."
+  brand_color: "#06B6D4"
+  default_prompt: "Use $ssh-health-check to diagnose my SSH failure."
+
+policy:
+  allow_implicit_invocation: true

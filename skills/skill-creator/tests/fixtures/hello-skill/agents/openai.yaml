@@ -1,0 +1,8 @@
+interface:
+  display_name: "Hello Skill"
+  short_description: "Fixture hello skill for tests."
+  brand_color: "#3B82F6"
+  default_prompt: "Use $hello-skill to run the hello fixture."
+
+policy:
+  allow_implicit_invocation: true

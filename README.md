@@ -1,4 +1,4 @@
-# AgentBox v5.6.0 — Operations Autopilot
+# AgentBox v5.6.2 — Operations Autopilot
 
 Versioned AgentBox v5 control plane. **v5.6 = Operations Autopilot** (playbooks, drift, forecast, cleanup, smart backup, remediation, upgrade readiness) on top of v5.5 Evaluation + v5.4 Tools + v5.3 Planning + v5.2 Intelligence + v5.1 Distributed Workers + Stable Ops.
 
@@ -7,6 +7,11 @@ Versioned AgentBox v5 control plane. **v5.6 = Operations Autopilot** (playbooks,
 > **Low-risk auto; high-risk needs approval.** Playbooks like `quarantine_worker` / `restore_backup` never apply without human approval.
 >
 > **Deploy:** only host `cursor` / Tailscale `100.123.66.15` / user `box` / root `/workspace/agentbox-v5` — `agentbox-deploy-guard`.
+
+
+## Dashboard (v5.6.2)
+
+Control Plane SPA polish: **Ops** page (`#ops`), richer Overview (doctor/forecast/web·daemon pills, live WS feed, quick actions), create-task form, mobile sidebar + bottom nav, denser dark theme. Login shows version + `agent5 web token` hint.
 
 ## Operations Autopilot (v5.6)
 
@@ -47,7 +52,7 @@ agent5 worker list
 ```bash
 cd /workspace/agentbox-v5
 ./install.sh
-agent5 version   # 5.6.0
+agent5 version   # 5.6.2
 agent5 doctor    # HEALTHY
 agent5 selftest  # RESULT: PASS
 ```

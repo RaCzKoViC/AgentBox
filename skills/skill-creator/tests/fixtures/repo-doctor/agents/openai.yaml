@@ -1,0 +1,8 @@
+interface:
+  display_name: "Repo Doctor"
+  short_description: "Diagnose Git repository health issues."
+  brand_color: "#F59E0B"
+  default_prompt: "Use $repo-doctor to analyze this Git repository's health."
+
+policy:
+  allow_implicit_invocation: true

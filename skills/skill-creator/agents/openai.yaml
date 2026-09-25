@@ -1,0 +1,8 @@
+interface:
+  display_name: "Skill Creator"
+  short_description: "Create, validate, test, improve, and package Agent Skills."
+  brand_color: "#3B82F6"
+  default_prompt: "Use $skill-creator to create a new reusable Agent Skill from my requirements."
+
+policy:
+  allow_implicit_invocation: true

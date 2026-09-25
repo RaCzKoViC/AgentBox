@@ -1,0 +1,28 @@
+{
+  "id": "code.interpreter.exec",
+  "name": "code.interpreter.exec",
+  "display_name": "LibreChat Code Interpreter",
+  "category": "sandbox",
+  "provider": "librechat",
+  "version": "0.1.0",
+  "capabilities": ["code.execute", "code.interpreter", "sandbox"],
+  "permissions": ["docker", "network"],
+  "risk": {"default": "MEDIUM"},
+  "execution": {"mode": "cli", "command": "agentbox-code-interpreter", "timeout": 180},
+  "input_schema": {
+    "type": "object",
+    "required": ["code"],
+    "properties": {
+      "lang": {"type": "string", "default": "python"},
+      "code": {"type": "string"}
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "ok": {"type": "boolean"},
+      "stdout": {"type": "string"},
+      "exit_code": {"type": "integer"}
+    }
+  }
+}

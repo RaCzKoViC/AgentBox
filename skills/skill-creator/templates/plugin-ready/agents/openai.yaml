@@ -1,0 +1,8 @@
+interface:
+  display_name: "{{DISPLAY_NAME}}"
+  short_description: "{{DESCRIPTION}}"
+  brand_color: "#10B981"
+  default_prompt: "{{DEFAULT_PROMPT}}"
+
+policy:
+  allow_implicit_invocation: true

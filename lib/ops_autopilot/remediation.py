@@ -34,8 +34,18 @@ def status() -> dict[str, Any]:
     pending = store.list_remediations(status="awaiting_approval", limit=20)
     recent = store.list_remediations(limit=10)
     plans = store.list_maintenance_plans(limit=5)
+    try:
+        from ops_autopilot.health_registry import evaluate as health_evaluate
+        health = health_evaluate(persist=False)
+    except Exception as e:
+        health = {"ok": False, "score": 0, "status": "unknown", "error": str(e)}
+    try:
+        from ops_autopilot.incidents import list_incidents
+        open_incidents = list_incidents(status="open", limit=20)
+    except Exception:
+        open_incidents = []
     return {
-        "ok": doc.get("ok", False) and fc.get("level") != "critical",
+        "ok": doc.get("ok", False) and fc.get("level") != "critical" and health.get("status") != "critical",
         "doctor": {"health": doc.get("health"), "ok": doc.get("ok"), "failed": doc.get("failed"), "version": doc.get("version")},
         "forecast": {"level": fc.get("level"), "signals": fc.get("signals"), "resources": fc.get("resources")},
         "lifecycle": life,
@@ -43,7 +53,9 @@ def status() -> dict[str, Any]:
         "pending_approvals": pending,
         "recent_actions": recent,
         "maintenance_plans": plans,
-        "version": "5.6.0",
+        "health": health,
+        "open_incidents": open_incidents,
+        "version": "5.6.2",
     }
 
 

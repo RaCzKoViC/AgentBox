@@ -2,15 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>{{ title }}</title>
   <link rel="stylesheet" href="/static/app.css"/>
 </head>
 <body>
   <div id="app">
-    <aside class="sidebar">
-      <div class="brand">AgentBox <span class="ver">{{ version }}</span></div>
-      <nav>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head">
+        <div class="brand">AgentBox <span class="ver">{{ version }}</span></div>
+        <button type="button" id="nav-close" class="icon-btn mobile-only" aria-label="Close menu">✕</button>
+      </div>
+      <nav id="main-nav">
         <a href="#overview" data-page="overview" class="active">Overview</a>
         <a href="#tasks" data-page="tasks">Tasks</a>
         <a href="#approvals" data-page="approvals">Approvals</a>
@@ -21,21 +24,33 @@
         <a href="#plans" data-page="plans">Plans</a>
         <a href="#tools" data-page="tools">Tools</a>
         <a href="#eval" data-page="eval">Eval</a>
+        <a href="#ops" data-page="ops">Ops</a>
         <a href="#metrics" data-page="metrics">Metrics</a>
       </nav>
       <div class="sidebar-foot">
         <span id="ws-state" class="pill">ws: …</span>
-        <button id="logout" class="linkish">Logout</button>
+        <button id="logout" class="linkish" type="button">Logout</button>
       </div>
     </aside>
+    <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
     <main>
       <header class="top">
-        <h2 id="page-title">Overview</h2>
+        <div class="top-left">
+          <button type="button" id="nav-toggle" class="icon-btn mobile-only" aria-label="Open menu">☰</button>
+          <h2 id="page-title">Overview</h2>
+        </div>
         <div id="live-banner" class="muted">Connecting…</div>
       </header>
       <section id="content"></section>
     </main>
   </div>
+  <nav class="bottom-nav mobile-only" id="bottom-nav" aria-label="Primary">
+    <a href="#overview" data-page="overview">Home</a>
+    <a href="#tasks" data-page="tasks">Tasks</a>
+    <a href="#ops" data-page="ops">Ops</a>
+    <a href="#approvals" data-page="approvals">Approvals</a>
+    <a href="#metrics" data-page="metrics">More</a>
+  </nav>
   <script src="/static/app.js"></script>
 </body>
 </html>

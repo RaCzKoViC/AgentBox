@@ -1,5 +1,15 @@
 const form = document.getElementById('login');
 const err = document.getElementById('err');
+const verEl = document.getElementById('login-ver');
+(async () => {
+  try {
+    const r = await fetch('/api/v1/health');
+    if (r.ok) {
+      const h = await r.json();
+      if (h.version && verEl) verEl.textContent = h.version;
+    }
+  } catch {}
+})();
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   err.hidden = true;

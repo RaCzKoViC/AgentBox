@@ -1,7 +1,7 @@
 """AgentBox v5.6 — Operations Autopilot & Autonomous Platform Maintenance."""
 from __future__ import annotations
 
-VERSION = "5.6.0"
+VERSION = "5.6.2"
 
 __all__ = [
     "VERSION",

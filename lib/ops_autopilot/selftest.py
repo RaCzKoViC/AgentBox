@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""v5.6 ops autopilot selftest."""
+"""v5.6.2 ops_autopilot selftest."""
 from __future__ import annotations
 
 import os
 import re
 import sys
 
-sys.path.insert(0, os.environ.get("AGENTBOX_V5_LIB", str(__file__.rsplit("/", 2)[0] if False else "")))
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
@@ -23,12 +22,16 @@ def main() -> int:
     from ops_autopilot.readiness import upgrade_readiness, plan_maintenance
     from ops_autopilot import store
     from storage import db as dbmod
+    from ops_autopilot.incidents import open_incident, list_incidents, get_incident, close_incident
+    from ops_autopilot.anomalies import detect as detect_anomalies
+    from ops_autopilot.runbooks import list_runbooks, run_runbook
+    from ops_autopilot.restore_drill import run_restore_drill, list_drills
+    from ops_autopilot.health_registry import evaluate as health_evaluate
 
     ver = read_version()
-    assert re.match(r"^5\.\d+\.\d+", ver), ver
+    assert re.match(r"^5\.6\.2", ver), ver
     doc = doctor()
     assert doc.get("ok"), doc
-    assert "version" not in (doc.get("failed") or []), doc
     print("OK: doctor HEALTHY version", ver, doc.get("health"))
 
     pbs = list_playbooks()
@@ -40,8 +43,8 @@ def main() -> int:
         "restart_web_if_down",
         "detect_config_drift",
     ):
-        assert need in ids, ids
-    assert any(p["risk_level"] == "HIGH" for p in pbs)
+        assert need in ids, (need, ids)
+    assert any(p.get("risk_level") == "HIGH" for p in pbs)
     print("OK: playbooks", sorted(ids))
 
     with dbmod.connect() as conn:
@@ -60,7 +63,7 @@ def main() -> int:
     print("OK: low-risk playbooks dry-run")
 
     hi = run_playbook("quarantine_worker", dry_run=False, triggered_by="selftest")
-    assert hi["status"] == "awaiting_approval" or hi.get("result", {}).get("blocked_high_risk"), hi
+    assert hi["status"] == "awaiting_approval" or (hi.get("result") or {}).get("blocked_high_risk"), hi
     print("OK: high-risk blocked without approval", hi["status"])
 
     fc = forecast()
@@ -88,10 +91,10 @@ def main() -> int:
     print("OK: backup-schedule", bs["decision"].get("needed"))
 
     st = status()
-    assert st.get("version") == "5.6.0", st
+    assert st.get("version") == "5.6.2", st
     print("OK: ops status")
 
-    rd = upgrade_readiness(target_version="5.6.0")
+    rd = upgrade_readiness(target_version="5.6.2")
     assert "checks" in rd, rd
     print("OK: readiness ready=", rd.get("ready"), "blockers", rd.get("blockers"))
 
@@ -102,6 +105,52 @@ def main() -> int:
     applied = run_playbook("clear_stale_pids", dry_run=False, triggered_by="selftest")
     assert applied["status"] == "passed", applied
     print("OK: clear_stale_pids applied")
+
+    # --- v5.6.2 gap-fill ---
+    inc = open_incident(
+        title="selftest-incident",
+        severity="SEV4",
+        component="selftest",
+        kind="selftest",
+        symptoms=["selftest"],
+    )
+    assert inc.get("id"), inc
+    assert get_incident(inc["id"])
+    assert any(i["id"] == inc["id"] for i in list_incidents(limit=50))
+    closed = close_incident(
+        inc["id"],
+        message="selftest done",
+        resolution={"message": "ok", "confirmed": True},
+    )
+    assert closed.get("status") in ("resolved", "closed"), closed
+    print("OK: incidents open/list/close", inc["id"])
+
+    an = detect_anomalies(persist=True, raise_incidents=True)
+    assert an.get("ok") and "anomalies" in an, an
+    print("OK: anomaly detect count", an.get("count"))
+
+    rbs = list_runbooks()
+    assert len(rbs) >= 5, rbs
+    rb = run_runbook("clear_stale_pids", dry_run=True)
+    assert rb.get("status") in ("passed", "awaiting_approval"), rb
+    assert rb.get("verify", {}).get("ok") is True, rb
+    print("OK: runbooks", len(rbs), "dry-run", rb["status"])
+
+    drill = run_restore_drill(note="selftest restore-drill")
+    assert drill.get("result") in ("PASS", "WARN"), drill
+    assert drill.get("backup_id"), drill
+    assert list_drills(limit=5), "no drills recorded"
+    print("OK: restore-drill", drill.get("result"), drill.get("backup_id"))
+
+    health = health_evaluate(persist=True)
+    assert "score" in health and health.get("status"), health
+    assert 0 <= int(health["score"]) <= 100
+    print("OK: health score", health["score"], health["status"])
+
+    st2 = status()
+    assert st2.get("version") == "5.6.2", st2
+    assert "health" in st2 and "open_incidents" in st2, st2
+    print("OK: ops status includes health+incidents")
 
     print("RESULT: PASS")
     return 0

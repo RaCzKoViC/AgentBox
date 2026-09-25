@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install AgentBox v5.6.0 (Ops Autopilot + Evaluation + Tools + Planning + Intelligence + Distributed)
+# Install AgentBox v5.6.1 (Ops Autopilot + Evaluation + Tools + Planning + Intelligence + Distributed)
 set -euo pipefail
 
 command -v agentbox-deploy-guard >/dev/null 2>&1 || { echo "[ERR] guard missing"; exit 1; }

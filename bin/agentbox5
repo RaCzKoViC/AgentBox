@@ -88,7 +88,8 @@ Usage:
   agentbox5 propose list|show|approve|reject
   agentbox5 baseline show [SUITE]
   agentbox5 ops status|scan|remediate|playbook|drift|forecast|cleanup|backup-schedule
-  agentbox5 selftest [--distributed] [--intelligence] [--tools] [--evaluation] [--ops]
+  agentbox5 selftest [--keep-tmp] [--distributed] [--intelligence] [--tools] [--evaluation] [--ops]
+                     # isolated: runs in a mkdtemp dir (HOME/AGENTBOX_V5_HOME/DB), never touches live data
 
 Autonomous: AGENTBOX_AUTO_APPROVE=1 auto-approves non-CRITICAL.
 CRITICAL (force_push, privileged docker, /etc writes) still DENY.
@@ -1231,16 +1232,153 @@ cmd_ops() {
   python3 "${AGENTBOX_V5_LIB}/ops_autopilot/cli.py" "$@"
 }
 
+# --- selftest isolation (v5.6.2 hotfix) --------------------------------------
+# `agent5 selftest` runs fully isolated: a fresh tempfile.mkdtemp() dir becomes
+# HOME + AGENTBOX_V5_HOME + AGENTBOX_V5_DB for the whole run (Python code resolves
+# ~/.config/agentbox-v5 and ~/.local/share/agentbox/v5 via Path.home()), so the
+# live data dir / live config files are never written.  --keep-tmp keeps the dir.
+_selftest_live_guard() {
+  # Abort if the resolved selftest data dir/DB/config dir is the live one.
+  local live_home="${AGENTBOX_SELFTEST_LIVE_HOME:-}"
+  local real_home="${AGENTBOX_SELFTEST_REAL_HOME:-}"
+  if [[ "${AGENTBOX_SELFTEST:-}" != "1" || -z "$live_home" || -z "$real_home" || -z "${AGENTBOX_SELFTEST_TMP:-}" ]]; then
+    echo "FATAL: selftest body invoked without isolation (use: agent5 selftest)" >&2
+    return 3
+  fi
+  local st_home st_db default_live
+  st_home="$(realpath -m "$AGENTBOX_V5_HOME")"
+  st_db="$(realpath -m "$AGENTBOX_V5_DB")"
+  default_live="$(realpath -m "$real_home/.local/share/agentbox/v5")"
+  if [[ "$st_home" == "$live_home" || "$st_home" == "$default_live" \
+        || "$st_db" == "$(realpath -m "$live_home/data/agentbox.db")" \
+        || "$st_db" == "$(realpath -m "$default_live/data/agentbox.db")" \
+        || "$(realpath -m "$HOME")" == "$(realpath -m "$real_home")" \
+        || "$st_home" != "$(realpath -m "$AGENTBOX_SELFTEST_TMP")"/* ]]; then
+    echo "FATAL: selftest data dir resolves to the LIVE data dir (home=$st_home db=$st_db live=$live_home) — aborting" >&2
+    return 3
+  fi
+  # Same check on what the Python modules actually resolve
+  local py_paths
+  py_paths="$(PYTHONPATH="${AGENTBOX_V5_LIB}" python3 -c '
+import os
+from ops.paths import data_home, db_path, config_dir, share_config_dir
+from api.deps import DATA_ROOT
+for p in (data_home(), db_path(), config_dir(), share_config_dir(), DATA_ROOT):
+    print(os.path.realpath(p))
+')" || { echo "FATAL: cannot resolve python paths for selftest guard" >&2; return 3; }
+  local tmp_real line
+  tmp_real="$(realpath -m "$AGENTBOX_SELFTEST_TMP")"
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    if [[ "$line" != "$tmp_real"/* ]]; then
+      echo "FATAL: selftest path escapes temp dir: $line (live=$live_home) — aborting" >&2
+      return 3
+    fi
+  done <<<"$py_paths"
+  echo "selftest guard OK: isolated in $tmp_real (live dir untouched: $live_home)"
+}
+
 cmd_selftest() {
+  local keep_tmp=0 a
+  local -a pass=()
+  for a in "$@"; do
+    case "$a" in
+      --keep-tmp) keep_tmp=1 ;;
+      *) pass+=("$a") ;;
+    esac
+  done
+  local real_home="$HOME"
+  local live_home
+  live_home="$(realpath -m "${AGENTBOX_V5_HOME:-$real_home/.local/share/agentbox/v5}")"
+  local tmp
+  tmp="$(python3 -c 'import tempfile; print(tempfile.mkdtemp(prefix="agentbox5-selftest-"))')" \
+    || { echo "FAIL: mkdtemp" >&2; return 1; }
+  tmp="$(realpath "$tmp")"
+  local st_home="$tmp/home/.local/share/agentbox/v5"
+  if [[ "$(realpath -m "$st_home")" == "$live_home" ]]; then
+    echo "FATAL: selftest data dir equals live data dir ($live_home) — aborting" >&2
+    rm -rf -- "$tmp"
+    return 3
+  fi
+  # Seed isolated dir with READ-ONLY copies of live config (never written back)
+  mkdir -p "$st_home"/{config,data,memory,logs,runtime} "$tmp/home/.config/agentbox-v5" "$tmp/work"
+  [[ -f "$live_home/VERSION" ]] && cp -f "$live_home/VERSION" "$st_home/VERSION"
+  [[ -d "$live_home/config" ]] && cp -a "$live_home/config/." "$st_home/config/"
+  local d
+  for d in workflows benchmarks plugins; do
+    [[ -d "$live_home/$d" ]] && cp -a "$live_home/$d" "$st_home/$d"
+  done
+  if [[ -d "$real_home/.config/agentbox-v5" ]]; then
+    find "$real_home/.config/agentbox-v5" -maxdepth 1 -type f -name '*.ini' -exec cp -f {} "$tmp/home/.config/agentbox-v5/" \;
+  fi
+  # Isolated demo git project (never touch /workspace/projects/demo-python)
+  local demo="$tmp/work/demo-python"
+  mkdir -p "$demo"
+  printf '%s\n' 'def add(a, b):' '    """Add two numbers."""' '    return a + b' '' 'def network_connect(host):' '    """Handle network connections."""' '    return f"connected:{host}"' > "$demo/main.py"
+  printf '%s\n' '# Demo' 'Calculator and network helpers.' > "$demo/README.md"
+  git -C "$demo" init -q && git -C "$demo" add -A \
+    && git -C "$demo" -c user.email=selftest@agentbox.local -c user.name=selftest commit -qm init
+
+  echo "selftest: isolated tmp dir: $tmp"
+  local rc=0
+  set +e
+  (
+    set -euo pipefail
+    export HOME="$tmp/home"
+    export PYTHONUSERBASE="${PYTHONUSERBASE:-$real_home/.local}"
+    if [[ -f "$real_home/.gitconfig" ]]; then export GIT_CONFIG_GLOBAL="${GIT_CONFIG_GLOBAL:-$real_home/.gitconfig}"; fi
+    export AGENTBOX_V5_HOME="$st_home"
+    export AGENTBOX_V5_DB="$st_home/data/agentbox.db"
+    export AGENTBOX_V5_RUNNER=stub
+    export AGENTBOX_SELFTEST=1 AGENTBOX_SELFTEST_TMP="$tmp" AGENTBOX_SELFTEST_LIVE_HOME="$live_home" AGENTBOX_SELFTEST_REAL_HOME="$real_home"
+    export AGENTBOX_SELFTEST_DEMO="$demo" AGENTBOX_DEMO_PYTHON="$demo"
+    export TMPDIR="$tmp/work"
+    export PYTHONDONTWRITEBYTECODE=1
+    # System python3 may lack PyYAML (workflow templates); fall back to the AgentBox venv
+    # interpreter (executed read-only, nothing is written to the live dir).
+    if ! python3 -c 'import yaml' 2>/dev/null && [[ -x "$live_home/venv/bin/python3" ]] \
+       && "$live_home/venv/bin/python3" -c 'import yaml' 2>/dev/null; then
+      echo "selftest: system python3 lacks PyYAML — using AgentBox venv python ($live_home/venv/bin)"
+      export PATH="$live_home/venv/bin:$PATH"
+    fi
+    _selftest_body "${pass[@]}"
+  )
+  rc=$?
+  set -e
+  # Stop anything the selftest may have left running inside the tmp dir
+  local pf pid
+  for pf in "$st_home/runtime/pids/agentboxd.pid" "$st_home/runtime/pids/web.pid"; do
+    [[ -f "$pf" ]] || continue
+    pid="$(tr -d '[:space:]' < "$pf" 2>/dev/null || true)"
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null \
+       && tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | grep -qx "AGENTBOX_V5_HOME=$st_home"; then
+      kill "$pid" 2>/dev/null || true
+    fi
+  done
+  if [[ "$keep_tmp" == "1" ]]; then
+    echo "selftest: kept tmp dir (--keep-tmp): $tmp"
+  elif [[ "$tmp" == */agentbox5-selftest-* ]]; then
+    rm -rf -- "$tmp"
+    echo "selftest: removed tmp dir $tmp"
+  fi
+  [[ "$rc" == "0" ]] || echo "selftest: FAILED (rc=$rc)" >&2
+  return "$rc"
+}
+
+_selftest_body() {
   echo "== agentbox5 selftest (5.5.0 Evaluation + Tools + Planning + Intelligence + Distributed + Stable) =="
   export AGENTBOX_AUTO_APPROVE=1
   # Fast path: stub runner for Safety selftest (Codex exercised separately by parent)
   export AGENTBOX_V5_RUNNER="${AGENTBOX_V5_RUNNER:-stub}"
   cmd_version
   ab5_ensure_env
+  _selftest_live_guard || return 3
   mkdir -p "$AGENTBOX_V5_HOME/config"
   local src_cfg
   src_cfg="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/config"
+  if [[ ! -d "$src_cfg" && -n "${AGENTBOX_V5_ROOT:-}" && -d "${AGENTBOX_V5_ROOT}/config" ]]; then
+    src_cfg="${AGENTBOX_V5_ROOT}/config"
+  fi
   if [[ -d "$src_cfg" ]]; then
     cp -f "$src_cfg/budgets.toml" "$AGENTBOX_V5_HOME/config/" 2>/dev/null || true
     cp -f "$src_cfg/policies.toml" "$AGENTBOX_V5_HOME/config/" 2>/dev/null || true
@@ -1274,7 +1412,7 @@ cmd_selftest() {
   echo "RUNNER=$AGENTBOX_V5_RUNNER"
   cmd_init_db
 
-  local proj="/tmp/agentbox5-selftest"
+  local proj="${AGENTBOX_SELFTEST_TMP:-/tmp}/agentbox5-selftest"
   mkdir -p "$proj"
 
   # --- 1) Budget smoke via budgets.py (non-blocking for codex; enforced in module CLI) ---
@@ -1338,7 +1476,7 @@ print("OK: budget.exceeded event")
 
   # --- 4) sandbox worktree demo-python ---
   echo "== smoke: sandbox worktree demo-python =="
-  local demo="/workspace/projects/demo-python"
+  local demo="${AGENTBOX_SELFTEST_DEMO:-/workspace/projects/demo-python}"
   if [[ ! -d "$demo/.git" ]]; then
     echo "WARN: $demo not a git repo — creating temp git project"
     demo="$(mktemp -d)/demo-python"
@@ -1900,7 +2038,7 @@ matches = find_tools("git")
 assert matches and any("git" in (m.get("id") or "") for m in matches), matches
 print("OK: search git", [m["id"] for m in matches[:5]])
 
-demo = Path("/workspace/projects/demo-python")
+demo = Path(os.environ.get("AGENTBOX_SELFTEST_DEMO") or "/workspace/projects/demo-python")
 if not (demo / ".git").exists():
     subprocess.run(["git", "init"], cwd=str(demo), check=True, capture_output=True)
     subprocess.run(["git", "config", "user.email", "box@agentbox.local"], cwd=str(demo), capture_output=True)

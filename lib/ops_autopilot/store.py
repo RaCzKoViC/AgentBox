@@ -83,6 +83,73 @@ CREATE TABLE IF NOT EXISTS maintenance_plans (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_maint_plans_status ON maintenance_plans(status);
+
+CREATE TABLE IF NOT EXISTS ops_incidents (
+    id TEXT PRIMARY KEY,
+    fingerprint TEXT NOT NULL,
+    title TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'SEV3',
+    status TEXT NOT NULL DEFAULT 'open',
+    component TEXT DEFAULT '',
+    source TEXT DEFAULT 'anomaly',
+    symptoms_json TEXT DEFAULT '[]',
+    evidence_json TEXT DEFAULT '{}',
+    suspected_causes_json TEXT DEFAULT '[]',
+    runbook_id TEXT,
+    resolution_json TEXT DEFAULT '{}',
+    detected_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    resolved_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_ops_incidents_status ON ops_incidents(status);
+CREATE INDEX IF NOT EXISTS idx_ops_incidents_fp ON ops_incidents(fingerprint);
+CREATE INDEX IF NOT EXISTS idx_ops_incidents_sev ON ops_incidents(severity);
+
+CREATE TABLE IF NOT EXISTS ops_incident_events (
+    id TEXT PRIMARY KEY,
+    incident_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    message TEXT DEFAULT '',
+    detail_json TEXT DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(incident_id) REFERENCES ops_incidents(id)
+);
+CREATE INDEX IF NOT EXISTS idx_ops_inc_events ON ops_incident_events(incident_id);
+
+CREATE TABLE IF NOT EXISTS ops_anomalies (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'SEV3',
+    component TEXT DEFAULT '',
+    metric TEXT DEFAULT '',
+    value_json TEXT DEFAULT '{}',
+    threshold_json TEXT DEFAULT '{}',
+    incident_id TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_ops_anomalies_status ON ops_anomalies(status);
+
+CREATE TABLE IF NOT EXISTS ops_restore_drills (
+    id TEXT PRIMARY KEY,
+    backup_id TEXT,
+    result TEXT NOT NULL DEFAULT 'PASS',
+    verify_json TEXT DEFAULT '{}',
+    dry_restore_json TEXT DEFAULT '{}',
+    notes TEXT DEFAULT '',
+    destructive INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_ops_restore_drills ON ops_restore_drills(created_at);
+
+CREATE TABLE IF NOT EXISTS ops_health_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    score INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    components_json TEXT DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
@@ -318,3 +385,234 @@ def list_maintenance_plans(status: Optional[str] = None, limit: int = 20) -> lis
         d["forecast"] = _loads(d.pop("forecast_json", None), {})
         out.append(d)
     return out
+
+
+# --- v5.6.2 gap-fill: incidents / anomalies / restore drills / health ---
+
+def insert_incident(conn, row: dict[str, Any]) -> None:
+    conn.execute(
+        """INSERT INTO ops_incidents
+           (id, fingerprint, title, severity, status, component, source,
+            symptoms_json, evidence_json, suspected_causes_json, runbook_id,
+            resolution_json, detected_at, updated_at, resolved_at, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            row["id"],
+            row["fingerprint"],
+            row["title"],
+            row.get("severity", "SEV3"),
+            row.get("status", "open"),
+            row.get("component", ""),
+            row.get("source", "anomaly"),
+            _j(row.get("symptoms") or []),
+            _j(row.get("evidence") or {}),
+            _j(row.get("suspected_causes") or []),
+            row.get("runbook_id"),
+            _j(row.get("resolution") or {}),
+            row.get("detected_at") or dbmod.utc_now(),
+            row.get("updated_at") or dbmod.utc_now(),
+            row.get("resolved_at"),
+            row.get("created_at") or dbmod.utc_now(),
+        ),
+    )
+
+
+def update_incident(conn, incident_id: str, **fields: Any) -> None:
+    sets, vals = [], []
+    mapping = {
+        "symptoms": "symptoms_json",
+        "evidence": "evidence_json",
+        "suspected_causes": "suspected_causes_json",
+        "resolution": "resolution_json",
+    }
+    for k, v in fields.items():
+        col = mapping.get(k, k)
+        if k in mapping:
+            sets.append(f"{col}=?")
+            vals.append(_j(v))
+        else:
+            sets.append(f"{col}=?")
+            vals.append(v)
+    if not sets:
+        return
+    vals.append(incident_id)
+    conn.execute(f"UPDATE ops_incidents SET {', '.join(sets)} WHERE id=?", vals)
+
+
+def _row_incident(r) -> dict[str, Any]:
+    d = dict(r)
+    d["symptoms"] = _loads(d.pop("symptoms_json", None), [])
+    d["evidence"] = _loads(d.pop("evidence_json", None), {})
+    d["suspected_causes"] = _loads(d.pop("suspected_causes_json", None), [])
+    d["resolution"] = _loads(d.pop("resolution_json", None), {})
+    return d
+
+
+def list_incidents(status: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
+    with dbmod.connect() as conn:
+        ensure_schema(conn)
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM ops_incidents WHERE status=? ORDER BY detected_at DESC LIMIT ?",
+                (status, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM ops_incidents ORDER BY detected_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+    return [_row_incident(r) for r in rows]
+
+
+def get_incident(incident_id: str) -> Optional[dict[str, Any]]:
+    with dbmod.connect() as conn:
+        ensure_schema(conn)
+        r = conn.execute("SELECT * FROM ops_incidents WHERE id=?", (incident_id,)).fetchone()
+    return _row_incident(r) if r else None
+
+
+def find_open_incident_by_fingerprint(fingerprint: str) -> Optional[dict[str, Any]]:
+    with dbmod.connect() as conn:
+        ensure_schema(conn)
+        r = conn.execute(
+            "SELECT * FROM ops_incidents WHERE fingerprint=? AND status NOT IN ('resolved','closed') "
+            "ORDER BY detected_at DESC LIMIT 1",
+            (fingerprint,),
+        ).fetchone()
+    return _row_incident(r) if r else None
+
+
+def insert_incident_event(conn, row: dict[str, Any]) -> None:
+    conn.execute(
+        """INSERT INTO ops_incident_events
+           (id, incident_id, event_type, message, detail_json, created_at)
+           VALUES (?,?,?,?,?,?)""",
+        (
+            row["id"],
+            row["incident_id"],
+            row["event_type"],
+            row.get("message", ""),
+            _j(row.get("detail") or {}),
+            row.get("created_at") or dbmod.utc_now(),
+        ),
+    )
+
+
+def list_incident_events(incident_id: str, limit: int = 100) -> list[dict[str, Any]]:
+    with dbmod.connect() as conn:
+        ensure_schema(conn)
+        rows = conn.execute(
+            "SELECT * FROM ops_incident_events WHERE incident_id=? ORDER BY created_at ASC LIMIT ?",
+            (incident_id, limit),
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["detail"] = _loads(d.pop("detail_json", None), {})
+        out.append(d)
+    return out
+
+
+def insert_anomaly(conn, row: dict[str, Any]) -> None:
+    conn.execute(
+        """INSERT INTO ops_anomalies
+           (id, kind, severity, component, metric, value_json, threshold_json,
+            incident_id, status, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (
+            row["id"],
+            row["kind"],
+            row.get("severity", "SEV3"),
+            row.get("component", ""),
+            row.get("metric", ""),
+            _j(row.get("value") or {}),
+            _j(row.get("threshold") or {}),
+            row.get("incident_id"),
+            row.get("status", "open"),
+            row.get("created_at") or dbmod.utc_now(),
+        ),
+    )
+
+
+def list_anomalies(status: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
+    with dbmod.connect() as conn:
+        ensure_schema(conn)
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM ops_anomalies WHERE status=? ORDER BY created_at DESC LIMIT ?",
+                (status, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM ops_anomalies ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["value"] = _loads(d.pop("value_json", None), {})
+        d["threshold"] = _loads(d.pop("threshold_json", None), {})
+        out.append(d)
+    return out
+
+
+def insert_restore_drill(conn, row: dict[str, Any]) -> None:
+    conn.execute(
+        """INSERT INTO ops_restore_drills
+           (id, backup_id, result, verify_json, dry_restore_json, notes, destructive, created_at)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (
+            row["id"],
+            row.get("backup_id"),
+            row.get("result", "PASS"),
+            _j(row.get("verify") or {}),
+            _j(row.get("dry_restore") or {}),
+            row.get("notes", ""),
+            1 if row.get("destructive") else 0,
+            row.get("created_at") or dbmod.utc_now(),
+        ),
+    )
+
+
+def list_restore_drills(limit: int = 20) -> list[dict[str, Any]]:
+    with dbmod.connect() as conn:
+        ensure_schema(conn)
+        rows = conn.execute(
+            "SELECT * FROM ops_restore_drills ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["destructive"] = bool(d.get("destructive"))
+        d["verify"] = _loads(d.pop("verify_json", None), {})
+        d["dry_restore"] = _loads(d.pop("dry_restore_json", None), {})
+        out.append(d)
+    return out
+
+
+def insert_health_sample(conn, row: dict[str, Any]) -> None:
+    conn.execute(
+        """INSERT INTO ops_health_samples (score, status, components_json, created_at)
+           VALUES (?,?,?,?)""",
+        (
+            int(row.get("score", 0)),
+            row.get("status", "unknown"),
+            _j(row.get("components") or {}),
+            row.get("created_at") or dbmod.utc_now(),
+        ),
+    )
+
+
+def latest_health_sample() -> Optional[dict[str, Any]]:
+    with dbmod.connect() as conn:
+        ensure_schema(conn)
+        r = conn.execute(
+            "SELECT * FROM ops_health_samples ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    if not r:
+        return None
+    d = dict(r)
+    d["components"] = _loads(d.pop("components_json", None), {})
+    return d
+

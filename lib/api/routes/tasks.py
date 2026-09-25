@@ -14,10 +14,13 @@ def list_tasks(
     provider: Optional[str] = None,
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
     _actor: Actor = Depends(get_actor),
 ):
     from storage import db as dbmod
     tasks = dbmod.list_tasks(status=status)
+    if order == "desc":
+        tasks = list(reversed(tasks))  # newest first (list_tasks is created_at ASC)
     if project_id:
         tasks = [t for t in tasks if t.get("project_id") == project_id]
     if provider:
